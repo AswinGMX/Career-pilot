@@ -20,7 +20,7 @@ interface RequestOptions extends RequestInit {
 
 async function request<TResponse>(path: string, options: RequestOptions = {}): Promise<TResponse> {
   const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
-    credentials: "same-origin",
+    credentials: appConfig.apiBaseUrl ? "include" : "same-origin",
     headers: {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...(options.headers || {})

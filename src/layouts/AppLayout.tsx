@@ -1,6 +1,6 @@
 import { Outlet, ScrollRestoration } from "react-router-dom";
 
-import { NoticeBanner } from "@/shared/components";
+import { LeavePromptDialog, NoticeBanner } from "@/shared/components";
 import { usePageFocus } from "@/shared/hooks";
 import { useAuthStore } from "@/store";
 import { ContentPageSkeleton } from "@/shared/components/Skeletons";
@@ -21,6 +21,7 @@ export function AppLayout(): JSX.Element {
       <a className="skip-link" href="#route-content">
         Skip to content
       </a>
+      <LeavePromptDialog />
       <NoticeBanner />
       <main id="route-content" data-route-focus tabIndex={-1} style={{ minHeight: "100vh" }}>
         <Outlet />

@@ -19,6 +19,8 @@ export function SecuritySettingsForm({
   passwordsMatch,
   values
 }: SecuritySettingsFormProps): JSX.Element {
+  const isSubmitDisabled = isSubmitting || !passwordsMatch || !values.currentPassword;
+
   return (
     <Card className="stack">
       <div className="card__header">
@@ -60,10 +62,16 @@ export function SecuritySettingsForm({
         />
       </Field>
       <div className="actions">
-        <Button disabled={isSubmitting || !passwordsMatch} onClick={() => void onSubmit()}>
+        <Button disabled={isSubmitDisabled} variant="primary" onClick={() => void onSubmit()}>
           {isSubmitting ? "Saving..." : "Update password"}
         </Button>
       </div>
+      {!isSubmitting && isSubmitDisabled ? (
+        <p className="support-copy">
+          Enter your current password, then make sure the new password is at least 6 characters and matches the
+          confirmation.
+        </p>
+      ) : null}
     </Card>
   );
 }

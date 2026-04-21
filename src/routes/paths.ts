@@ -15,12 +15,26 @@ export const routePaths = {
   settingsProfile: "/settings/profile",
   settingsSecurity: "/settings/security",
   adminOverview: "/admin/overview",
+  adminOnboarding: "/admin/onboarding",
   adminStudents: "/admin/students",
-  adminCareers: "/admin/careers"
+  adminCareers: "/admin/careers",
+  adminCareerDetail: "/admin/careers/:careerId"
 } as const;
 
 export function buildDashboardCareerDetailPath(careerId: string): string {
   return `/dashboard/careers/${careerId}`;
+}
+
+export function buildAdminCareerDetailPath(careerId: string): string {
+  return `/admin/careers/${careerId}`;
+}
+
+export function buildAdminStudentDetailsPath(studentId?: string): string {
+  if (!studentId) {
+    return routePaths.adminStudents;
+  }
+
+  return `${routePaths.adminStudents}?studentId=${encodeURIComponent(studentId)}`;
 }
 
 export const dashboardNavItems = [
@@ -37,6 +51,7 @@ export const settingsNavItems = [
 
 export const adminNavItems = [
   { to: routePaths.adminOverview, label: "Overview" },
-  { to: routePaths.adminStudents, label: "Students" },
+  { to: routePaths.adminOnboarding, label: "Onboarding" },
+  { to: routePaths.adminStudents, label: "Student Details" },
   { to: routePaths.adminCareers, label: "Careers" }
 ] as const;

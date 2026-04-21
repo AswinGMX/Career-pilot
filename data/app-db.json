@@ -2125,6 +2125,28 @@
   ],
   "activityLog": [
     {
+      "id": "651cee83-f319-4cda-997e-03f9fb8816ae",
+      "createdAt": "2026-04-19T18:16:40.130Z",
+      "type": "proof_completed",
+      "details": {
+        "userId": "b26212bf-a29c-42d5-97d9-aa08c777a7f8",
+        "careerId": "data-analyst",
+        "points": 940
+      },
+      "timestamp": "2026-04-19T18:16:40.130Z"
+    },
+    {
+      "id": "ff5a6c05-a391-402d-b4a1-7cf54ac704cb",
+      "createdAt": "2026-04-19T18:08:32.973Z",
+      "type": "proof_completed",
+      "details": {
+        "userId": "244240ad-8a90-44d5-a1d5-58eb9e176b31",
+        "careerId": "software-engineer",
+        "points": 880
+      },
+      "timestamp": "2026-04-19T18:08:32.973Z"
+    },
+    {
       "id": "be286430-d44c-4f9c-96be-28c601881252",
       "createdAt": "2026-04-17T19:54:48.727Z",
       "type": "profile_submitted",

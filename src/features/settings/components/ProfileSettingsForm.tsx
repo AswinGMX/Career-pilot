@@ -55,7 +55,7 @@ export function ProfileSettingsForm({
         </Field>
       </div>
       <div className="actions">
-        <Button disabled={isSubmitting} onClick={() => void onSubmit()}>
+        <Button disabled={isSubmitting} variant="primary" onClick={() => void onSubmit()}>
           {isSubmitting ? "Saving..." : "Save changes"}
         </Button>
       </div>

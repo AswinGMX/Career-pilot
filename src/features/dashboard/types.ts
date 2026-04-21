@@ -113,6 +113,7 @@ export interface ProofSession {
   userId: string;
   careerId: string;
   careerTitle: string;
+  careerCategory: string;
   status: string;
   questionSet: ProofQuestionSet;
   answers: QuestionAnswer[];

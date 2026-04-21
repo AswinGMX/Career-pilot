@@ -20,20 +20,35 @@ export default function DashboardCareerHelpPage(): JSX.Element {
   const [searchParams] = useSearchParams();
   const score = Number(searchParams.get("score") || 0);
   const career = decodeCareerName(searchParams.get("career"));
-  const isTechnology = searchParams.get("technology") === "1";
+  const category = searchParams.get("category") || "";
+  const isTechnology =
+    category.trim().toLowerCase() === "technology" || (!category && searchParams.get("technology") === "1");
   const isBelowPar = score < 65;
+  const isMentorPath = !isTechnology;
 
   const headline = useMemo(() => {
+    if (isMentorPath && isBelowPar) {
+      return `Next step: rebuild your ${career} path with mentor guidance`;
+    }
+
+    if (isMentorPath) {
+      return `Next step: move forward in ${career} with an in-person mentor`;
+    }
+
     if (isBelowPar) {
       return `We can strengthen your path toward ${career}`;
     }
 
     return `Next step: turn your ${career} momentum into placements`;
-  }, [career, isBelowPar]);
+  }, [career, isBelowPar, isMentorPath]);
 
-  const summary = isBelowPar
-    ? "This is the support layer. Start by building stronger real-world signals, then come back with better proof."
-    : "This is the acceleration layer. Build verified signals and sharper visibility before targeting top companies.";
+  const summary = isMentorPath
+    ? isBelowPar
+      ? "This path needs real-world guidance first. Work with a mentor, build discipline in live settings, and then return with stronger proof."
+      : "This path grows faster through in-person guidance, field exposure, and someone experienced helping you take the next right step."
+    : isBelowPar
+      ? "This is the support layer. Start by building stronger real-world signals, then come back with better proof."
+      : "This is the acceleration layer. Build verified signals and sharper visibility before targeting top companies.";
 
   return (
     <div className="career-help-page">
@@ -46,12 +61,33 @@ export default function DashboardCareerHelpPage(): JSX.Element {
         <p>{summary}</p>
         <div className="actions">
           <span className={`pill ${isBelowPar ? "pill--danger" : "pill--success"}`}>Current score {score}%</span>
-          {isTechnology ? <span className="pill">Technology pathway unlocked</span> : <span className="pill">Career support unlocked</span>}
+          {isTechnology ? <span className="pill">Technology pathway unlocked</span> : <span className="pill">Mentor pathway unlocked</span>}
         </div>
       </Card>
 
       <section className="career-help-center">
-        {isBelowPar ? (
+        {isMentorPath ? (
+          <div className="career-help-logo-grid">
+            <article className="career-help-logo-card">
+              <div className="career-help-logo-mark career-help-logo-mark--mentor">M</div>
+              <strong>In-person mentor</strong>
+              <p>
+                {isBelowPar
+                  ? `You need a mentor who can guide your next ${career} step in a realistic environment.`
+                  : `The best next move is an in-person mentor who can guide your growth in ${career}.`}
+              </p>
+            </article>
+            <article className="career-help-logo-card">
+              <div className="career-help-logo-mark career-help-logo-mark--field">R</div>
+              <strong>Real-world exposure</strong>
+              <p>
+                {isBelowPar
+                  ? "Shadow the role, observe the work reality, and build readiness before the next proof attempt."
+                  : "Use shadowing, live observation, and guided practice to convert readiness into consistent action."}
+              </p>
+            </article>
+          </div>
+        ) : isBelowPar ? (
           <div className="career-help-logo-grid">
             <a className="career-help-logo-card" href="https://digri.ai/" rel="noreferrer" target="_blank">
               <img
@@ -85,12 +121,7 @@ export default function DashboardCareerHelpPage(): JSX.Element {
               <p>Show verified skill proof before placement outreach.</p>
             </a>
           </div>
-        ) : (
-          <Card className="career-help-generic">
-            <h2>Support is ready</h2>
-            <p>Keep building stronger evidence through practice, reflection, and repeat proof sessions for this path.</p>
-          </Card>
-        )}
+        ) : null}
       </section>
 
       <div className="actions career-help-actions">

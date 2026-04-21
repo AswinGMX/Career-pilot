@@ -1,6 +1,7 @@
-import { memo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Link, createSearchParams } from "react-router-dom";
 
+import { dashboardApi } from "@/features/dashboard/api";
 import type { ProofSession } from "@/features/dashboard/types";
 import { routePaths } from "@/routes/paths";
 import { Card } from "@/shared/components";
@@ -10,39 +11,81 @@ interface ProofHistoryListProps {
   sessions: ProofSession[];
 }
 
-const technologyKeywords = [
-  "technology",
-  "software",
-  "engineer",
-  "developer",
-  "data",
-  "computer",
-  "digital",
-  "ai",
-  "tech"
-];
-
-function isTechnologyProofSession(session: ProofSession): boolean {
-  const haystack = [
-    session.careerTitle,
-    session.evaluation?.narrative,
-    session.evaluation?.parentSummary,
-    session.evaluation?.schoolSummary
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return technologyKeywords.some((keyword) => haystack.includes(keyword));
+function getSessionCareerCategory(session: ProofSession, resolvedCategories: Record<string, string>): string {
+  return String(session.careerCategory || resolvedCategories[session.careerId] || "").trim();
 }
 
-function getCareerHelpCta(score: number): string {
+function isTechnologyProofSession(session: ProofSession, resolvedCategories: Record<string, string>): boolean {
+  return getSessionCareerCategory(session, resolvedCategories).toLowerCase() === "technology";
+}
+
+function getCareerHelpCta(score: number, isTechnology: boolean): string {
+  if (isTechnology) {
+    return score < 65
+      ? "Build your technology path before placements"
+      : "I will help you get placed in companies like Amazon, Netflix, and Google";
+  }
+
   return score < 65
-    ? "Dont worry .I will help you with your career"
-    : "I will help you to get placed in company like Amazon ,netflix ,google";
+    ? "Work with an in-person mentor before the next step"
+    : "Find an in-person mentor for your next step";
 }
 
 export const ProofHistoryList = memo(function ProofHistoryList({ sessions }: ProofHistoryListProps): JSX.Element {
+  const [resolvedCategories, setResolvedCategories] = useState<Record<string, string>>({});
+
+  const missingCareerIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          sessions
+            .filter((session) => !String(session.careerCategory || "").trim() && session.careerId)
+            .map((session) => session.careerId)
+            .filter((careerId) => !resolvedCategories[careerId])
+        )
+      ),
+    [resolvedCategories, sessions]
+  );
+
+  useEffect(() => {
+    if (!missingCareerIds.length) {
+      return;
+    }
+
+    let isActive = true;
+
+    void Promise.all(
+      missingCareerIds.map(async (careerId) => {
+        try {
+          const response = await dashboardApi.getCareer(careerId);
+          return [careerId, response.career.category] as const;
+        } catch {
+          return [careerId, ""] as const;
+        }
+      })
+    ).then((entries) => {
+      if (!isActive) {
+        return;
+      }
+
+      setResolvedCategories((current) => {
+        const next = { ...current };
+
+        entries.forEach(([careerId, careerCategory]) => {
+          if (careerCategory) {
+            next[careerId] = careerCategory;
+          }
+        });
+
+        return next;
+      });
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [missingCareerIds]);
+
   if (!sessions.length) {
     return (
       <div className="empty-state">
@@ -57,7 +100,13 @@ export const ProofHistoryList = memo(function ProofHistoryList({ sessions }: Pro
       {sessions.map((session) => {
         const score = session.evaluation?.overallScore || 0;
         const readiness = getProofReadinessState(score);
-        const isTechnology = isTechnologyProofSession(session);
+        const careerCategory = getSessionCareerCategory(session, resolvedCategories);
+        const isTechnology = isTechnologyProofSession(session, resolvedCategories);
+        const helpButtonTone = isTechnology
+          ? score < 65
+            ? "proof-help-button--support"
+            : "proof-help-button--placement"
+          : "proof-help-button--mentor";
 
         return (
           <Card key={session.id}>
@@ -85,17 +134,17 @@ export const ProofHistoryList = memo(function ProofHistoryList({ sessions }: Pro
             </ul>
             <div className="actions">
               <Link
-                className={`button proof-help-button ${score < 65 ? "proof-help-button--support" : "proof-help-button--placement"}`}
+                className={`button proof-help-button ${helpButtonTone}`}
                 to={{
                   pathname: routePaths.dashboardCareerHelp,
                   search: createSearchParams({
                     score: String(score),
                     career: session.careerTitle,
-                    technology: isTechnology ? "1" : "0"
+                    category: careerCategory
                   }).toString()
                 }}
               >
-                {getCareerHelpCta(score)}
+                {getCareerHelpCta(score, isTechnology)}
               </Link>
             </div>
           </Card>

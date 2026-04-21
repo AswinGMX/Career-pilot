@@ -245,6 +245,60 @@ Report + Parent Dashboard
 
 ---
 
+## Local Setup
+
+### Prerequisites
+
+- Node.js 18+  
+- npm  
+
+### 1. Clone the project
+
+```bash
+git clone <your-repo-url>
+cd Career-pilot
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Build the project
+
+```bash
+npm run build
+```
+
+### 4. Start the application locally
+
+```bash
+npm start
+```
+
+### 5. Open in browser
+
+```text
+http://127.0.0.1:3000
+```
+
+### Useful commands
+
+Typecheck:
+
+```bash
+npm run typecheck
+```
+
+Development mode:
+
+```bash
+npm run dev
+```
+
+---
+
 ## ⚠️ Reality Check (Important for Judges)
 
 ❌ Don’t say:  

@@ -34,8 +34,10 @@ const dashboardCareerHelpPageImport: PageImporter = () => import("@/pages/dashbo
 const settingsProfilePageImport: PageImporter = () => import("@/pages/settings-profile");
 const settingsSecurityPageImport: PageImporter = () => import("@/pages/settings-security");
 const adminOverviewPageImport: PageImporter = () => import("@/pages/admin-overview");
+const adminOnboardingPageImport: PageImporter = () => import("@/pages/admin-onboarding");
 const adminStudentsPageImport: PageImporter = () => import("@/pages/admin-students");
 const adminCareersPageImport: PageImporter = () => import("@/pages/admin-careers");
+const adminCareerDetailPageImport: PageImporter = () => import("@/pages/admin-career-detail");
 const notFoundPageImport: PageImporter = () => import("@/pages/not-found");
 
 const pagePrefetchers = new Map<string, PageImporter>([
@@ -51,6 +53,7 @@ const pagePrefetchers = new Map<string, PageImporter>([
   [routePaths.settingsProfile, settingsProfilePageImport],
   [routePaths.settingsSecurity, settingsSecurityPageImport],
   [routePaths.adminOverview, adminOverviewPageImport],
+  [routePaths.adminOnboarding, adminOnboardingPageImport],
   [routePaths.adminStudents, adminStudentsPageImport],
   [routePaths.adminCareers, adminCareersPageImport]
 ]);
@@ -151,7 +154,11 @@ const routeDefinitions: RouteDefinition[] = [
       },
       {
         path: routePaths.dashboard,
-        element: createElement(AuthGuard, null, createElement(DashboardLayout)),
+        element: createElement(
+          AuthGuard,
+          null,
+          createElement(RoleGuard, { role: "student" }, createElement(DashboardLayout))
+        ),
         meta: {
           id: "dashboard",
           label: "Dashboard",
@@ -310,11 +317,24 @@ const routeDefinitions: RouteDefinition[] = [
             }
           },
           {
+            path: "onboarding",
+            element: lazyElement(adminOnboardingPageImport, createElement(ContentPageSkeleton), "Admin onboarding"),
+            meta: {
+              id: "admin-onboarding",
+              label: "Onboarding",
+              icon: "user-plus",
+              parent: "admin",
+              section: "admin",
+              requiresAuth: true,
+              role: "admin"
+            }
+          },
+          {
             path: "students",
             element: lazyElement(adminStudentsPageImport, createElement(TablePageSkeleton), "Admin students"),
             meta: {
               id: "admin-students",
-              label: "Students",
+              label: "Student Details",
               icon: "users",
               parent: "admin",
               section: "admin",
@@ -330,6 +350,19 @@ const routeDefinitions: RouteDefinition[] = [
               label: "Careers",
               icon: "briefcase",
               parent: "admin",
+              section: "admin",
+              requiresAuth: true,
+              role: "admin"
+            }
+          },
+          {
+            path: "careers/:careerId",
+            element: lazyElement(adminCareerDetailPageImport, createElement(ContentPageSkeleton), "Admin career detail"),
+            meta: {
+              id: "admin-career-detail",
+              label: "Career Detail",
+              icon: "briefcase",
+              parent: "admin-careers",
               section: "admin",
               requiresAuth: true,
               role: "admin"

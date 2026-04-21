@@ -20,8 +20,18 @@ const gradeOptions = [
 ];
 
 export default function DashboardProfilePage(): JSX.Element {
-  const { dashboard, formValues, generateQuestions, isDirty, isLoading, isSubmitting, questionSet, submitProfile, updateField } =
-    useProfileStudioPage();
+  const {
+    dashboard,
+    formValues,
+    generateQuestions,
+    isDirty,
+    isGeneratingQuestions,
+    isLoading,
+    isSubmittingProfile,
+    questionSet,
+    submitProfile,
+    updateField
+  } = useProfileStudioPage();
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isEditorOpen, setIsEditorOpen] = useState<boolean>(true);
 
@@ -146,10 +156,21 @@ export default function DashboardProfilePage(): JSX.Element {
               </Field>
             </div>
             <div className="actions">
-              <Button disabled={isSubmitting} variant="secondary" onClick={() => void generateQuestions()}>
-                {isSubmitting ? "Working..." : "Generate short AI question set"}
+              <Button
+                aria-busy={isGeneratingQuestions}
+                className={isGeneratingQuestions ? "button--loading" : undefined}
+                disabled={isGeneratingQuestions || isSubmittingProfile}
+                variant="primary"
+                onClick={() => void generateQuestions()}
+              >
+                {isGeneratingQuestions ? "Generating AI question set..." : "Generate short AI question set"}
               </Button>
             </div>
+            {isGeneratingQuestions ? (
+              <div className="status-callout status-callout--info async-generation-status" aria-live="polite">
+                Generating your assessment questions. This can take a few seconds.
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="profile-studio-collapsed">
@@ -197,10 +218,11 @@ export default function DashboardProfilePage(): JSX.Element {
           ))}
           <div className="actions">
             <Button
-              disabled={isSubmitting}
+              disabled={isGeneratingQuestions || isSubmittingProfile}
+              variant="primary"
               onClick={() => void submitProfile(answers)}
             >
-              {isSubmitting ? "Submitting..." : "Submit profile"}
+              {isSubmittingProfile ? "Submitting..." : "Submit profile"}
             </Button>
           </div>
         </Card>

@@ -3,11 +3,24 @@ import { useState } from "react";
 import { ProofHistoryList, useProofCenterPage } from "@/features/dashboard";
 import { Button, Card, EmptyState } from "@/shared/components";
 import { ContentPageSkeleton } from "@/shared/components/Skeletons";
+import { useUnsavedChangesPrompt } from "@/shared/hooks";
 import { labelize } from "@/shared/utils";
 
 export default function DashboardProofPage(): JSX.Element {
-  const { currentProofSession, dashboard, isLoading, isSubmitting, submitProofSession } = useProofCenterPage();
+  const { currentProofSession, dashboard, isLoading, isStartingProofSession, isSubmittingProofSession, submitProofSession } =
+    useProofCenterPage();
   const [answers, setAnswers] = useState<Record<string, number>>({});
+
+  useUnsavedChangesPrompt(
+    Boolean(isStartingProofSession || currentProofSession),
+    "You cannot leave while the proof assessment is in progress. Submit this assessment to continue.",
+    {
+      allowLeave: false,
+      cancelLabel: "Continue assessment",
+      kicker: "Assessment in progress",
+      title: "Finish this assessment first"
+    }
+  );
 
   if (isLoading) {
     return <ContentPageSkeleton />;
@@ -38,7 +51,24 @@ export default function DashboardProofPage(): JSX.Element {
         </div>
       </Card>
 
-      {currentProofSession ? (
+      {isStartingProofSession ? (
+        <Card className="stack">
+          <div className="card__header">
+            <div>
+              <p className="eyebrow">Proof center</p>
+              <h2>Preparing proof questions...</h2>
+            </div>
+          </div>
+          <div className="actions">
+            <Button aria-busy className="button--loading" disabled variant="secondary">
+              Preparing proof session...
+            </Button>
+          </div>
+          <div className="status-callout status-callout--info async-generation-status" aria-live="polite">
+            Building the career readiness questions. This can take a few seconds.
+          </div>
+        </Card>
+      ) : currentProofSession ? (
         <Card className="stack">
           <div className="card__header">
             <div>
@@ -77,8 +107,12 @@ export default function DashboardProofPage(): JSX.Element {
             </fieldset>
           ))}
           <div className="actions">
-            <Button disabled={isSubmitting} onClick={() => void submitProofSession(answers)}>
-              {isSubmitting ? "Submitting..." : "Submit proof evidence"}
+            <Button
+              disabled={isStartingProofSession || isSubmittingProofSession}
+              variant="primary"
+              onClick={() => void submitProofSession(answers)}
+            >
+              {isSubmittingProofSession ? "Submitting..." : "Submit proof evidence"}
             </Button>
           </div>
         </Card>

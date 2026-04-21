@@ -50,7 +50,7 @@ export default function DashboardHomePage(): JSX.Element {
           title="Complete your AI profile"
           description="Your recommendation dashboard becomes more accurate once the profile studio has enough evidence."
           action={
-            <Button onClick={() => navigate(routePaths.dashboardProfile)}>
+            <Button variant="primary" onClick={() => navigate(routePaths.dashboardProfile)}>
               Open profile studio
             </Button>
           }

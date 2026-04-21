@@ -5,12 +5,23 @@ import { Card } from "@/shared/components";
 import { formatDate, getProofReadinessState } from "@/shared/utils";
 
 interface AdminStudentReportProps {
+  isLoading?: boolean;
   report: AdminStudentReportPayload | null;
 }
 
 export const AdminStudentReport = memo(function AdminStudentReport({
+  isLoading = false,
   report
 }: AdminStudentReportProps): JSX.Element {
+  if (isLoading) {
+    return (
+      <div className="empty-state">
+        <h2>Loading student details</h2>
+        <p>Fetching profile, recommendations, and proof evidence for this learner.</p>
+      </div>
+    );
+  }
+
   if (!report) {
     return (
       <div className="empty-state">

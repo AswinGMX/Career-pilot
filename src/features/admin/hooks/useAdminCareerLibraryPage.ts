@@ -1,23 +1,19 @@
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { adminApi } from "@/features/admin/api";
 import type { Career } from "@/features/dashboard/types";
 import { useUiStore } from "@/store";
 
 export function useAdminCareerLibraryPage(): {
-  careers: Career[];
   filteredCareers: Career[];
   categories: string[];
-  selectedCareer: Career | null;
   search: string;
   category: string;
   isLoading: boolean;
   setSearch: (value: string) => void;
   setCategory: (value: string) => void;
-  selectCareer: (careerId: string) => void;
 } {
   const [careers, setCareers] = useState<Career[]>([]);
-  const [selectedCareerId, setSelectedCareerId] = useState<string>("");
   const [search, setSearch] = useState<string>("");
   const [category, setCategory] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -36,7 +32,6 @@ export function useAdminCareerLibraryPage(): {
         }
 
         setCareers(response.careers);
-        setSelectedCareerId(response.careers[0]?.id || "");
       })
       .catch((error: Error) => {
         if (!isActive) {
@@ -74,27 +69,13 @@ export function useAdminCareerLibraryPage(): {
 
   const categories = useMemo(() => [...new Set(careers.map((career) => career.category))].sort(), [careers]);
 
-  const selectedCareer = useMemo(
-    () => filteredCareers.find((career) => career.id === selectedCareerId) || careers.find((career) => career.id === selectedCareerId) || null,
-    [careers, filteredCareers, selectedCareerId]
-  );
-
-  const selectCareer = useCallback((careerId: string) => {
-    startTransition(() => {
-      setSelectedCareerId(careerId);
-    });
-  }, []);
-
   return {
-    careers,
     filteredCareers,
     categories,
-    selectedCareer,
     search,
     category,
     isLoading,
     setSearch,
-    setCategory,
-    selectCareer
+    setCategory
   };
 }

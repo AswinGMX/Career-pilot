@@ -48,11 +48,12 @@ function createSeedProfile({ userId, createdAt, basicInfo, analysis }) {
   });
 }
 
-function createSeedProof({ userId, createdAt, completedAt, careerId, careerTitle, evaluation }) {
+function createSeedProof({ userId, createdAt, completedAt, careerId, careerTitle, careerCategory, evaluation }) {
   return createRecord({
     userId,
     careerId,
     careerTitle,
+    careerCategory,
     status: "completed",
     questionSet: {
       source: "seed",
@@ -237,6 +238,7 @@ function ensureDemoData() {
           completedAt: daysAgo(13),
           careerId: armyOfficer.id,
           careerTitle: armyOfficer.title,
+          careerCategory: armyOfficer.category,
           evaluation: {
             source: "seed",
             overallScore: 84,
@@ -276,6 +278,7 @@ function ensureDemoData() {
           completedAt: daysAgo(11),
           careerId: softwareEngineer.id,
           careerTitle: softwareEngineer.title,
+          careerCategory: softwareEngineer.category,
           evaluation: {
             source: "seed",
             overallScore: 82,

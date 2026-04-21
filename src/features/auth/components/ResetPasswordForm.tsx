@@ -12,6 +12,7 @@ export function ResetPasswordForm({ isSubmitting, onSubmit }: ResetPasswordFormP
   const [confirmPassword, setConfirmPassword] = useState<string>("");
 
   const passwordsMatch = useMemo(() => password.length > 0 && password === confirmPassword, [confirmPassword, password]);
+  const isSubmitDisabled = isSubmitting || !passwordsMatch || password.length < 6;
 
   return (
     <form
@@ -54,9 +55,12 @@ export function ResetPasswordForm({ isSubmitting, onSubmit }: ResetPasswordFormP
           onChange={(event) => setConfirmPassword(event.target.value)}
         />
       </Field>
-      <Button disabled={isSubmitting || !passwordsMatch} type="submit">
+      <Button disabled={isSubmitDisabled} type="submit" variant="primary">
         {isSubmitting ? "Updating password..." : "Update password"}
       </Button>
+      {!isSubmitting && isSubmitDisabled ? (
+        <p className="support-copy">Use a password with at least 6 characters and make sure both password fields match.</p>
+      ) : null}
     </form>
   );
 }

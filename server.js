@@ -11,8 +11,19 @@ const { rankCareers } = require("./src/server/recommendations");
 const { ensureDemoData, getDemoAccounts } = require("./src/server/seed");
 
 const projectRoot = __dirname;
-const host = process.env.HOST || "127.0.0.1";
+const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 3000);
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : [];
+
+function setCorsHeaders(request, response) {
+  const origin = request.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Access-Control-Allow-Credentials", "true");
+    response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+}
 
 ensureDatabase();
 ensureDemoData();
@@ -84,19 +95,35 @@ function buildSettingsPayload(user, tenant) {
   };
 }
 
+function normalizeProofSession(session) {
+  if (!session) {
+    return null;
+  }
+
+  const career = session.careerId ? getCareerById(session.careerId) : null;
+
+  return {
+    ...session,
+    careerCategory: session.careerCategory || career?.category || ""
+  };
+}
+
 function summarizeProofSession(session) {
-  if (!session?.evaluation) {
+  const normalizedSession = normalizeProofSession(session);
+
+  if (!normalizedSession?.evaluation) {
     return null;
   }
 
   return {
-    id: session.id,
-    careerId: session.careerId,
-    careerTitle: session.careerTitle,
-    points: session.evaluation.points,
-    overallScore: session.evaluation.overallScore,
-    readinessBand: session.evaluation.readinessBand,
-    completedAt: session.completedAt
+    id: normalizedSession.id,
+    careerId: normalizedSession.careerId,
+    careerTitle: normalizedSession.careerTitle,
+    careerCategory: normalizedSession.careerCategory,
+    points: normalizedSession.evaluation.points,
+    overallScore: normalizedSession.evaluation.overallScore,
+    readinessBand: normalizedSession.evaluation.readinessBand,
+    completedAt: normalizedSession.completedAt
   };
 }
 
@@ -104,6 +131,7 @@ function buildStudentReport(user, db) {
   const profile = getProfileByUserId(db, user.id);
   const proofSessions = getProofSessionsByUserId(db, user.id)
     .filter((session) => session.status === "completed")
+    .map((session) => normalizeProofSession(session))
     .sort((left, right) => new Date(right.completedAt || right.createdAt) - new Date(left.completedAt || left.createdAt));
   const recommendations = profile ? rankCareers(profile.analysis, getCareerLibrary(), 8) : [];
   const totalPoints = proofSessions.reduce((sum, session) => sum + (session.evaluation?.points || 0), 0);
@@ -634,6 +662,7 @@ async function handleCreateProofSession(request, response, careerId) {
         userId: user.id,
         careerId: career.id,
         careerTitle: career.title,
+        careerCategory: career.category,
         status: "draft",
         questionSet,
         answers: []
@@ -646,7 +675,7 @@ async function handleCreateProofSession(request, response, careerId) {
     (item) => item.userId === user.id && item.careerId === career.id && item.status === "draft"
   );
 
-  sendJson(response, 201, { session });
+  sendJson(response, 201, { session: normalizeProofSession(session) });
 }
 
 async function handleSubmitProofSession(request, response, sessionId) {
@@ -690,7 +719,7 @@ async function handleSubmitProofSession(request, response, sessionId) {
   });
 
   const storedSession = updatedDb.proofSessions.find((item) => item.id === sessionId);
-  sendJson(response, 200, { session: storedSession });
+  sendJson(response, 200, { session: normalizeProofSession(storedSession) });
 }
 
 function handleProofSessions(request, response) {
@@ -702,7 +731,7 @@ function handleProofSessions(request, response) {
     (left, right) => new Date(right.completedAt || right.createdAt) - new Date(left.completedAt || left.createdAt)
   );
 
-  sendJson(response, 200, { sessions });
+  sendJson(response, 200, { sessions: sessions.map((session) => normalizeProofSession(session)) });
 }
 
 function handleAppConfig(response) {
@@ -849,6 +878,14 @@ async function routeApi(request, response, pathname) {
 
 const server = http.createServer(async (request, response) => {
   try {
+    setCorsHeaders(request, response);
+
+    if (request.method === "OPTIONS") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
     const { pathname } = getRequestInfo(request);
 
     if (pathname.startsWith("/api/")) {

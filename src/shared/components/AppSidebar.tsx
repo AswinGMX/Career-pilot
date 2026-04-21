@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { useAuthActions } from "@/features/auth";
 import { dashboardNavItems, routePaths, settingsNavItems, adminNavItems } from "@/routes/paths";
+import { getDefaultPrivateRoute, isAdminUser } from "@/shared/utils";
 import { useAuthStore } from "@/store";
 import { AppNavLink } from "./AppNavLink";
 
@@ -27,6 +28,9 @@ export function AppSidebar({ section }: AppSidebarProps): JSX.Element {
   const { isSubmitting, logout } = useAuthActions();
   const navItems = sectionNav[section];
   const [showLogout, setShowLogout] = useState(false);
+  const isAdmin = isAdminUser(session?.user);
+  const defaultPrivateRoute = session?.user ? getDefaultPrivateRoute(session) : routePaths.dashboard;
+  const settingsBackLabel = isAdmin ? "← Admin" : "← Dashboard";
 
   return (
     <aside className="sidebar" style={{
@@ -70,13 +74,16 @@ export function AppSidebar({ section }: AppSidebarProps): JSX.Element {
 
       {/* Cross-section links */}
       <div style={{ display: "flex", flexDirection: "column", gap: "4px", paddingTop: "12px", borderTop: "1px solid rgba(255,255,255,0.07)", marginTop: "8px" }}>
-        {section !== "dashboard" && (
+        {!isAdmin && section !== "dashboard" && (
           <AppNavLink label="← Dashboard" to={routePaths.dashboard} />
+        )}
+        {isAdmin && section === "settings" && (
+          <AppNavLink label={settingsBackLabel} to={defaultPrivateRoute} />
         )}
         {section !== "settings" && (
           <AppNavLink label="⚙️  Settings" to={routePaths.settingsProfile} />
         )}
-        {session?.user?.role === "school_admin" && section !== "admin" && (
+        {isAdmin && section !== "admin" && section !== "settings" && (
           <AppNavLink label="🏫  Admin" to={routePaths.adminOverview} />
         )}
         {/* Email + Sign out (toggleable) */}

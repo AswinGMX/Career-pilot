@@ -1,25 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { dashboardApi } from "@/features/dashboard/api";
 import type { ProofSession, StudentDashboardResponse } from "@/features/dashboard/types";
-import { routePaths } from "@/routes/paths";
 import { useUiStore } from "@/store";
+
+const minimumProofStartDurationMs = 1400;
+
+function wait(durationMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, durationMs);
+  });
+}
 
 export function useProofCenterPage(): {
   dashboard: StudentDashboardResponse | null;
   currentProofSession: ProofSession | null;
   isLoading: boolean;
-  isSubmitting: boolean;
+  isStartingProofSession: boolean;
+  isSubmittingProofSession: boolean;
   startProofSession: (careerId: string) => Promise<void>;
   submitProofSession: (answers: Record<string, number>) => Promise<void>;
 } {
   const [dashboard, setDashboard] = useState<StudentDashboardResponse | null>(null);
   const [currentProofSession, setCurrentProofSession] = useState<ProofSession | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const [isStartingProofSession, setIsStartingProofSession] = useState<boolean>(false);
+  const [isSubmittingProofSession, setIsSubmittingProofSession] = useState<boolean>(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const showNotice = useUiStore((state) => state.showNotice);
   const requestedCareerIdRef = useRef<string>("");
 
@@ -42,16 +50,19 @@ export function useProofCenterPage(): {
 
   const startProofSession = useCallback(
     async (careerId: string) => {
-      setIsSubmitting(true);
+      setIsStartingProofSession(true);
 
       try {
-        const response = await dashboardApi.startProofSession(careerId);
+        const [response] = await Promise.all([
+          dashboardApi.startProofSession(careerId),
+          wait(minimumProofStartDurationMs)
+        ]);
         setCurrentProofSession(response.session);
         showNotice("Proof session started. Complete every question to submit evidence.", "success");
       } catch (error) {
         showNotice((error as Error).message, "danger");
       } finally {
-        setIsSubmitting(false);
+        setIsStartingProofSession(false);
       }
     },
     [showNotice]
@@ -65,8 +76,11 @@ export function useProofCenterPage(): {
     }
 
     requestedCareerIdRef.current = careerId;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("careerId");
+    setSearchParams(nextParams, { replace: true });
     void startProofSession(careerId);
-  }, [currentProofSession, searchParams, startProofSession]);
+  }, [currentProofSession, searchParams, setSearchParams, startProofSession]);
 
   const submitProofSession = useCallback(
     async (answers: Record<string, number>) => {
@@ -85,29 +99,29 @@ export function useProofCenterPage(): {
         return;
       }
 
-      setIsSubmitting(true);
+      setIsSubmittingProofSession(true);
 
       try {
         await dashboardApi.submitProofSession(currentProofSession.id, payloadAnswers);
         setCurrentProofSession(null);
         requestedCareerIdRef.current = "";
         await refresh();
-        navigate(routePaths.dashboardProof, { replace: true });
         showNotice("Proof evidence completed successfully.", "success");
       } catch (error) {
         showNotice((error as Error).message, "danger");
       } finally {
-        setIsSubmitting(false);
+        setIsSubmittingProofSession(false);
       }
     },
-    [currentProofSession, navigate, refresh, showNotice]
+    [currentProofSession, refresh, showNotice]
   );
 
   return {
     dashboard,
     currentProofSession,
     isLoading,
-    isSubmitting,
+    isStartingProofSession,
+    isSubmittingProofSession,
     startProofSession,
     submitProofSession
   };

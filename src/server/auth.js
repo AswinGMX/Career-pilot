@@ -75,14 +75,17 @@ function parseSessionToken(token) {
 
 function buildSessionCookie(user) {
   const token = createSessionToken(user);
-  const securePart = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  const isProduction = process.env.NODE_ENV === "production";
+  const securePart = isProduction ? "; Secure; SameSite=None" : "; SameSite=Lax";
   return `${sessionCookieName}=${encodeURIComponent(
     token
-  )}; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax${securePart}`;
+  )}; Max-Age=604800; Path=/; HttpOnly${securePart}`;
 }
 
 function buildLogoutCookie() {
-  return `${sessionCookieName}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`;
+  const isProduction = process.env.NODE_ENV === "production";
+  const securePart = isProduction ? "; Secure; SameSite=None" : "; SameSite=Lax";
+  return `${sessionCookieName}=; Max-Age=0; Path=/; HttpOnly${securePart}`;
 }
 
 module.exports = {

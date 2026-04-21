@@ -5,5 +5,6 @@ export * from "./Button";
 export * from "./Card";
 export * from "./EmptyState";
 export * from "./Field";
+export * from "./LeavePromptDialog";
 export * from "./NoticeBanner";
 export * from "./Skeletons";

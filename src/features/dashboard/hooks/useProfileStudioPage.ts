@@ -18,6 +18,14 @@ const emptyProfileForm: ProfileFormValues = {
   avoidsOrDislikes: ""
 };
 
+const minimumGenerateDurationMs = 1400;
+
+function wait(durationMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, durationMs);
+  });
+}
+
 function buildProfileValues(dashboard: StudentDashboardResponse | null, fallbackGrade: string): ProfileFormValues {
   return {
     ...emptyProfileForm,
@@ -32,7 +40,8 @@ export function useProfileStudioPage(): {
   questionSet: ProfileQuestionSet | null;
   isDirty: boolean;
   isLoading: boolean;
-  isSubmitting: boolean;
+  isGeneratingQuestions: boolean;
+  isSubmittingProfile: boolean;
   updateField: (field: keyof ProfileFormValues, value: string) => void;
   generateQuestions: () => Promise<void>;
   submitProfile: (answers: Record<string, number>) => Promise<void>;
@@ -42,7 +51,8 @@ export function useProfileStudioPage(): {
   const [baseline, setBaseline] = useState<ProfileFormValues>(emptyProfileForm);
   const [questionSet, setQuestionSet] = useState<ProfileQuestionSet | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState<boolean>(false);
+  const [isSubmittingProfile, setIsSubmittingProfile] = useState<boolean>(false);
   const session = useAuthStore((state) => state.session);
   const showNotice = useUiStore((state) => state.showNotice);
 
@@ -79,16 +89,19 @@ export function useProfileStudioPage(): {
   }, []);
 
   const generateQuestions = useCallback(async () => {
-    setIsSubmitting(true);
+    setIsGeneratingQuestions(true);
 
     try {
-      const response = await dashboardApi.generateProfileQuestionSet(formValues);
+      const [response] = await Promise.all([
+        dashboardApi.generateProfileQuestionSet(formValues),
+        wait(minimumGenerateDurationMs)
+      ]);
       setQuestionSet(response);
       showNotice(`Short AI question set generated. Answer all ${response.questions.length} questions before submitting.`, "success");
     } catch (error) {
       showNotice((error as Error).message, "danger");
     } finally {
-      setIsSubmitting(false);
+      setIsGeneratingQuestions(false);
     }
   }, [formValues, showNotice]);
 
@@ -109,7 +122,7 @@ export function useProfileStudioPage(): {
         return;
       }
 
-      setIsSubmitting(true);
+      setIsSubmittingProfile(true);
 
       try {
         await dashboardApi.submitProfile({
@@ -123,7 +136,7 @@ export function useProfileStudioPage(): {
       } catch (error) {
         showNotice((error as Error).message, "danger");
       } finally {
-        setIsSubmitting(false);
+        setIsSubmittingProfile(false);
       }
     },
     [formValues, hydrate, questionSet, showNotice]
@@ -133,8 +146,9 @@ export function useProfileStudioPage(): {
     dashboard,
     formValues,
     isDirty,
+    isGeneratingQuestions,
     isLoading,
-    isSubmitting,
+    isSubmittingProfile,
     questionSet,
     updateField,
     generateQuestions,
