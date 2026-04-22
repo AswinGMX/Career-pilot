@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getProofSessions } from "@/lib/api";
+import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
 import { requireStudent } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -10,43 +11,42 @@ export default async function ProofSessionsPage(): Promise<JSX.Element> {
   const response = await getProofSessions();
 
   return (
-    <main style={{ maxWidth: "960px", margin: "0 auto", padding: "48px 24px" }}>
-      <p style={{ textTransform: "uppercase", letterSpacing: "0.08em", color: "#4b6480", fontSize: "12px" }}>
-        Student
-      </p>
-      <h1 style={{ marginTop: "8px", fontSize: "36px" }}>Proof sessions</h1>
-      <p style={{ color: "#334a62", lineHeight: 1.6 }}>
-        These sessions test readiness through AI-generated scenario questions, not technical trivia.
-      </p>
+    <AppPage>
+      <Hero
+        eyebrow="Student"
+        title="Proof sessions"
+        subtitle={<p style={{ margin: 0 }}>Test readiness through AI-generated scenario questions, not technical trivia.</p>}
+      />
 
-      <div style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
+      <div className="section-stack">
         {response.sessions.length ? (
-          response.sessions.map((session) => (
-            <article key={session.id} style={{ background: "#fff", border: "1px solid #d8e1eb", borderRadius: "14px", padding: "18px" }}>
-              <p style={{ margin: 0, fontSize: "12px", color: "#4b6480", textTransform: "uppercase" }}>
-                {session.status.replace("_", " ")} • {session.questionSource}
-              </p>
-              <h2 style={{ margin: "10px 0 8px", fontSize: "24px" }}>{session.career.title}</h2>
-              <p style={{ margin: 0, color: "#334a62", lineHeight: 1.6 }}>{session.career.summary}</p>
-              <p style={{ marginTop: "12px", color: "#4b6480" }}>
-                Answers: {session.answerCount}/{session.questionSet.questions.length}
-                {session.result ? ` • ${session.result.readinessBand} • ${session.result.overallScore}%` : ""}
-              </p>
-              <p style={{ marginTop: "12px" }}>
-                <Link href={`/student/proof-sessions/${session.id}`}>Open proof session</Link>
-              </p>
-            </article>
-          ))
+          <div className="panel-grid panel-grid--cards">
+            {response.sessions.map((session) => (
+              <SurfaceCard key={session.id}>
+                <p className="app-eyebrow">
+                  {session.status.replace("_", " ")} &bull; {session.questionSource}
+                </p>
+                <h2 style={{ margin: "10px 0 8px", fontSize: "1.5rem", lineHeight: 1 }}>{session.career.title}</h2>
+                <p className="muted-text" style={{ margin: 0 }}>{session.career.summary}</p>
+                <p className="muted-text" style={{ marginTop: "12px" }}>
+                  Answers: {session.answerCount}/{session.questionSet.questions.length}
+                  {session.result ? ` \u2022 ${session.result.readinessBand} \u2022 ${session.result.overallScore}%` : ""}
+                </p>
+                <p style={{ marginTop: "12px" }}>
+                  <Link href={`/student/proof-sessions/${session.id}`}>Open proof session</Link>
+                </p>
+              </SurfaceCard>
+            ))}
+          </div>
         ) : (
-          <section style={{ background: "#fff", border: "1px solid #d8e1eb", borderRadius: "14px", padding: "18px" }}>
-            <h2 style={{ marginTop: 0 }}>No proof sessions yet</h2>
-            <p style={{ color: "#334a62", lineHeight: 1.6 }}>
+          <SurfaceCard title="No proof sessions yet">
+            <p className="muted-text">
               Start from any career detail page to generate a scenario-based proof session.
             </p>
             <Link href="/student/careers">Browse careers</Link>
-          </section>
+          </SurfaceCard>
         )}
       </div>
-    </main>
+    </AppPage>
   );
 }

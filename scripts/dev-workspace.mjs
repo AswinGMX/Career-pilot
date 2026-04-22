@@ -1,6 +1,30 @@
 import net from "node:net";
 import { spawn } from "node:child_process";
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Load apps/api/.env so local overrides (like DATABASE_URL) are picked up
+try {
+  const envPath = resolve(__dirname, "..", "apps", "api", ".env");
+  const envContent = readFileSync(envPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex === -1) continue;
+    const key = trimmed.slice(0, eqIndex);
+    const value = trimmed.slice(eqIndex + 1);
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+} catch {
+  // .env file not found — fall back to defaults
+}
 
 const DEFAULT_DATABASE_URL = "postgresql://career_pilot:career_pilot@127.0.0.1:5432/career_pilot";
 const DEFAULT_REDIS_URL = "redis://127.0.0.1:6379";
@@ -62,7 +86,7 @@ async function main() {
   const webEnv = {
     ...sharedEnv,
     PORT: String(webPort),
-    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || `http://localhost:${apiPort}/v1`
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || `http://127.0.0.1:${apiPort}/v1`
   };
 
   console.log(`Starting Career Pilot local workspace`);

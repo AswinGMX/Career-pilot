@@ -27,15 +27,11 @@ function redirectToApp(session: AuthMeResponse["session"]): void {
 }
 
 function getBrowserApiBaseUrl(): string {
-  const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/v1";
-
-  if (typeof window === "undefined") {
-    return configuredBaseUrl;
+  if (typeof window !== "undefined") {
+    return "/api";
   }
 
-  const url = new URL(configuredBaseUrl);
-  url.hostname = window.location.hostname;
-  return url.toString().replace(/\/$/, "");
+  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/v1";
 }
 
 async function ensureSessionEstablished(): Promise<AuthMeResponse> {
@@ -84,6 +80,8 @@ async function postJson<TResponse>(path: string, payload: unknown): Promise<TRes
   return json as TResponse;
 }
 
+/* ── Old-style input (kept for non-landing pages) ── */
+
 function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }): JSX.Element {
   const { label, ...inputProps } = props;
 
@@ -94,6 +92,221 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: str
     </label>
   );
 }
+
+/* ── Landing-style field ── */
+
+function LandingField({
+  label,
+  hint,
+  type = "text",
+  placeholder,
+  value,
+  onChange,
+  required,
+  minLength
+}: {
+  label: string;
+  hint?: string;
+  type?: string;
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  minLength?: number;
+}): JSX.Element {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = type === "password";
+
+  return (
+    <div className="landing-field">
+      <label className="landing-field-label">
+        {label}
+        {hint ? <span className="label-hint"> {hint}</span> : null}
+      </label>
+      <div className={isPassword ? "landing-field-input-wrapper" : ""}>
+        <input
+          type={isPassword && showPassword ? "text" : type}
+          className="landing-field-input"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required={required}
+          minLength={minLength}
+        />
+        {isPassword ? (
+          <button
+            type="button"
+            className="toggle-password"
+            onClick={() => setShowPassword(!showPassword)}
+            tabIndex={-1}
+          >
+            {showPassword ? "🙈" : "👁"}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ── Landing Login Form ── */
+
+export function LandingLoginForm(): JSX.Element {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setIsSubmitting(true);
+        setError(null);
+
+        try {
+          await postJson<AuthMeResponse>("/auth/login", { email, password });
+          const establishedSession = await ensureSessionEstablished();
+          redirectToApp(establishedSession.session);
+        } catch (caughtError) {
+          setError((caughtError as Error).message);
+        } finally {
+          setIsSubmitting(false);
+        }
+      }}
+    >
+      <LandingField
+        label="Email Address"
+        type="email"
+        placeholder="you@example.com"
+        value={email}
+        onChange={setEmail}
+        required
+      />
+      <LandingField
+        label="Password"
+        type="password"
+        placeholder="Min. 6 characters"
+        value={password}
+        onChange={setPassword}
+        required
+      />
+      {error ? <p className="landing-error">{error}</p> : null}
+      <button type="submit" disabled={isSubmitting} className="landing-btn-primary">
+        {isSubmitting ? "Signing in..." : "Sign In"}
+      </button>
+    </form>
+  );
+}
+
+/* ── Landing Register Form ── */
+
+const accountTypeLabels: Record<RegisterAccountType, string> = {
+  individual: "Solo Student",
+  school_admin: "School Admin",
+  school_student: "Join School"
+};
+
+const accountTypeDescriptions: Record<RegisterAccountType, string> = {
+  individual: "Create an independent student account.",
+  school_admin: "Create a new school and manage students.",
+  school_student: "Join an existing school with a tenant slug."
+};
+
+export function LandingRegisterForm(): JSX.Element {
+  const [accountType, setAccountType] = useState<RegisterAccountType>("individual");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [schoolName, setSchoolName] = useState("");
+  const [tenantSlug, setTenantSlug] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const requiresSchoolName = accountType === "school_admin";
+  const requiresTenantSlug = accountType !== "individual";
+
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setIsSubmitting(true);
+        setError(null);
+
+        const payload: RegisterPayload = {
+          accountType,
+          fullName,
+          email,
+          password,
+          schoolName: requiresSchoolName ? schoolName : undefined,
+          tenantSlug: requiresTenantSlug ? tenantSlug : undefined
+        };
+
+        try {
+          await postJson<AuthMeResponse>("/auth/register", payload);
+          const establishedSession = await ensureSessionEstablished();
+          redirectToApp(establishedSession.session);
+        } catch (caughtError) {
+          setError((caughtError as Error).message);
+        } finally {
+          setIsSubmitting(false);
+        }
+      }}
+    >
+      <div className="landing-tabs">
+        {(["individual", "school_admin", "school_student"] as RegisterAccountType[]).map((type) => (
+          <button
+            key={type}
+            type="button"
+            className={`landing-tab${accountType === type ? " landing-tab--active" : ""}`}
+            onClick={() => setAccountType(type)}
+          >
+            {accountTypeLabels[type]}
+          </button>
+        ))}
+      </div>
+      <p className="landing-tab-description">{accountTypeDescriptions[accountType]}</p>
+
+      <LandingField label="Full Name" placeholder="John Doe" value={fullName} onChange={setFullName} required />
+      <LandingField
+        label="Email Address"
+        type="email"
+        placeholder="you@example.com"
+        value={email}
+        onChange={setEmail}
+        required
+      />
+      {requiresSchoolName ? (
+        <LandingField label="School Name" placeholder="e.g. Sunrise Academy" value={schoolName} onChange={setSchoolName} required />
+      ) : null}
+      {requiresTenantSlug ? (
+        <LandingField
+          label="Tenant Slug"
+          hint="(school only)"
+          placeholder="e.g. sunrise-public-school"
+          value={tenantSlug}
+          onChange={setTenantSlug}
+          required
+        />
+      ) : null}
+      <LandingField
+        label="Password"
+        type="password"
+        placeholder="Min. 6 characters"
+        value={password}
+        onChange={setPassword}
+        required
+        minLength={8}
+      />
+
+      {error ? <p className="landing-error">{error}</p> : null}
+      <button type="submit" disabled={isSubmitting} className="landing-btn-primary">
+        {isSubmitting ? "Creating account..." : "Create Account"}
+      </button>
+    </form>
+  );
+}
+
+/* ── Keep old forms for backward compatibility ── */
 
 export function LoginForm(): JSX.Element {
   const [email, setEmail] = useState("");
@@ -129,11 +342,7 @@ export function LoginForm(): JSX.Element {
         required
       />
       {error ? <p className="status-text--error" style={{ margin: 0 }}>{error}</p> : null}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="button-primary"
-      >
+      <button type="submit" disabled={isSubmitting} className="button-primary">
         {isSubmitting ? "Signing in..." : "Sign in"}
       </button>
     </form>
@@ -220,11 +429,7 @@ export function RegisterForm(): JSX.Element {
         />
       ) : null}
       {error ? <p className="status-text--error" style={{ margin: 0 }}>{error}</p> : null}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="button-primary"
-      >
+      <button type="submit" disabled={isSubmitting} className="button-primary">
         {isSubmitting ? "Creating account..." : "Create account"}
       </button>
     </form>
@@ -267,12 +472,57 @@ export function ForgotPasswordForm(): JSX.Element {
           Development reset token: <code>{resetToken}</code>
         </p>
       ) : null}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="button-primary"
-      >
+      <button type="submit" disabled={isSubmitting} className="button-primary">
         {isSubmitting ? "Preparing reset..." : "Request reset"}
+      </button>
+    </form>
+  );
+}
+
+export function LandingForgotPasswordForm(): JSX.Element {
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setIsSubmitting(true);
+        setMessage(null);
+        setResetToken(null);
+        setError(null);
+
+        try {
+          const response = await postJson<PasswordResetResponse>("/auth/forgot-password", { email } satisfies ForgotPasswordPayload);
+          setMessage(response.message);
+          setResetToken(response.resetToken || null);
+        } catch (caughtError) {
+          setError((caughtError as Error).message);
+        } finally {
+          setIsSubmitting(false);
+        }
+      }}
+    >
+      <LandingField
+        label="Email Address"
+        type="email"
+        placeholder="you@example.com"
+        value={email}
+        onChange={setEmail}
+        required
+      />
+      {error ? <p className="landing-error">{error}</p> : null}
+      {message ? <p className="landing-success">{message}</p> : null}
+      {resetToken ? (
+        <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#6b7280" }}>
+          Dev reset token: <code style={{ background: "#f3f4f6", padding: "2px 6px", borderRadius: "4px" }}>{resetToken}</code>
+        </p>
+      ) : null}
+      <button type="submit" disabled={isSubmitting} className="landing-btn-primary">
+        {isSubmitting ? "Preparing reset..." : "Request Reset"}
       </button>
     </form>
   );
@@ -319,11 +569,7 @@ export function ResetPasswordForm({ initialToken }: { initialToken: string }): J
       />
       {error ? <p className="status-text--error" style={{ margin: 0 }}>{error}</p> : null}
       {message ? <p className="status-text--success" style={{ margin: 0 }}>{message}</p> : null}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="button-primary"
-      >
+      <button type="submit" disabled={isSubmitting} className="button-primary">
         {isSubmitting ? "Resetting password..." : "Reset password"}
       </button>
     </form>

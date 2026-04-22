@@ -138,7 +138,7 @@ export class ReportsService {
         data: {
           status: ReportStatus.ready,
           reportJson: payload as unknown as Prisma.InputJsonValue,
-          fileUrl,
+          ...(fileUrl ? { fileUrl } : {}),
           errorMessage: null
         },
         include: {
@@ -342,7 +342,7 @@ export class ReportsService {
         data: {
           status: ReportStatus.ready,
           reportJson: payload as unknown as Prisma.InputJsonValue,
-          fileUrl,
+          ...(fileUrl ? { fileUrl } : {}),
           errorMessage: null
         }
       });
@@ -978,7 +978,8 @@ export class ReportsService {
       submittedAt: profile.submittedAt?.toISOString() || null,
       createdAt: profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
-      versionCount: profile.versions.length
+      versionCount: profile.versions.length,
+      cachedAssessmentResult: null
     };
   }
 
@@ -1098,7 +1099,8 @@ export class ReportsService {
     return process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_BASE_URL || "http://127.0.0.1:3000";
   }
 
-  private async writeReportExport(reportId: string, kind: "student" | "school", payload: object): Promise<string> {
+  private async writeReportExport(reportId: string, kind: "student" | "school", payload: object): Promise<string | null> {
+    if (process.env.NODE_ENV !== "development") return null;
     const directory = path.resolve(process.cwd(), ".generated-reports");
     await mkdir(directory, { recursive: true });
     const filePath = path.join(directory, `${kind}-${reportId}.json`);

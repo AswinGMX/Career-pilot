@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getLatestStudentReport } from "@/lib/api";
+import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
 import { requireStudent } from "@/lib/session";
 
 import { CreateParentShareButton, GenerateStudentReportButton, RevokeShareButton } from "./ReportActions";
@@ -13,22 +14,21 @@ export default async function StudentReportPage(): Promise<JSX.Element> {
   const report = response.report;
 
   return (
-    <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "48px 24px" }}>
-      <p style={{ textTransform: "uppercase", letterSpacing: "0.08em", color: "#4b6480", fontSize: "12px" }}>
-        Student report
-      </p>
-      <h1 style={{ marginTop: "8px", fontSize: "36px" }}>Career readiness report</h1>
-      <p style={{ color: "#334a62", lineHeight: 1.6 }}>
-        This is the durable report snapshot for {session.user.fullName}. Generate a fresh report whenever profile,
-        recommendation, or proof evidence changes.
-      </p>
-      <p style={{ marginTop: "12px" }}>
-        <Link href="/student/dashboard">Back to dashboard</Link>
-      </p>
+    <AppPage>
+      <Hero
+        eyebrow="Student report"
+        title="Career readiness report"
+        subtitle={
+          <p style={{ margin: 0 }}>
+            Durable report snapshot for {session.user.fullName}. Generate a fresh report whenever profile,
+            recommendation, or proof evidence changes.
+          </p>
+        }
+      />
 
-      <section style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
-        <Card title="Generate and export">
-          <p style={{ marginTop: 0, color: "#334a62" }}>
+      <div className="section-stack">
+        <SurfaceCard title="Generate and export">
+          <p className="muted-text" style={{ marginTop: 0 }}>
             Reports are persisted server-side and a private export file is generated with each snapshot.
           </p>
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
@@ -36,67 +36,66 @@ export default async function StudentReportPage(): Promise<JSX.Element> {
             {report?.status === "ready" ? <CreateParentShareButton /> : null}
           </div>
           {report ? (
-            <p style={{ marginBottom: 0, color: "#334a62" }}>
-              Status: {report.status} • Version: {report.version} • Export: {report.fileUrl || "Not prepared"}
+            <p className="muted-text" style={{ marginBottom: 0, marginTop: "12px" }}>
+              Status: {report.status} &bull; Version: {report.version} &bull; Export: {report.fileUrl || "Not prepared"}
             </p>
           ) : (
-            <p style={{ marginBottom: 0, color: "#334a62" }}>No report snapshot exists yet.</p>
+            <p className="muted-text" style={{ marginBottom: 0 }}>No report snapshot exists yet.</p>
           )}
-        </Card>
+        </SurfaceCard>
 
         {report?.report ? (
           <>
-            <Card title="Summary">
-              <p style={{ marginTop: 0, color: "#334a62" }}>
-                Top recommendation: {report.report.topRecommendationTitle || "Not available"} • Proof readiness:{" "}
-                {report.report.proofReadinessBand || "Not available"} • Confidence:{" "}
+            <SurfaceCard title="Summary">
+              <p className="muted-text" style={{ marginTop: 0 }}>
+                Top recommendation: {report.report.topRecommendationTitle || "Not available"} &bull; Proof readiness:{" "}
+                {report.report.proofReadinessBand || "Not available"} &bull; Confidence:{" "}
                 {report.report.proofConfidenceScore ?? "Not available"}
               </p>
-              <p style={{ marginBottom: 0, color: "#334a62" }}>
-                Profile status: {report.report.profileCompletionStatus || "missing"} • Generated at:{" "}
+              <p className="muted-text" style={{ marginBottom: 0 }}>
+                Profile status: {report.report.profileCompletionStatus || "missing"} &bull; Generated at:{" "}
                 {new Date(report.report.generatedAt).toLocaleString()}
               </p>
-            </Card>
+            </SurfaceCard>
 
-            <Card title="Recommendation highlights">
-              <ul style={{ margin: 0, paddingLeft: "20px", color: "#334a62", lineHeight: 1.8 }}>
+            <SurfaceCard title="Recommendation highlights">
+              <ul className="content-list">
                 {report.report.recommendationHighlights.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
-            </Card>
+            </SurfaceCard>
 
-            <Card title="Parent summary">
-              <p style={{ margin: 0, color: "#334a62", lineHeight: 1.7 }}>
+            <SurfaceCard title="Parent summary">
+              <p className="muted-text" style={{ margin: 0 }}>
                 {report.report.parentSummary || "A parent summary will appear after a completed proof session."}
               </p>
-            </Card>
+            </SurfaceCard>
 
-            <Card title="Next steps">
-              <ul style={{ margin: 0, paddingLeft: "20px", color: "#334a62", lineHeight: 1.8 }}>
+            <SurfaceCard title="Next steps">
+              <ul className="content-list">
                 {report.report.nextSteps.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
-            </Card>
+            </SurfaceCard>
 
-            <Card title="Active share links">
+            <SurfaceCard title="Active share links">
               {report.shares.length ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {report.shares.map((share) => (
                     <article
                       key={share.id}
-                      style={{ border: "1px solid #d8e1eb", borderRadius: "12px", padding: "14px" }}
+                      style={{ border: "1px solid #e2e6ec", borderRadius: "12px", padding: "14px" }}
                     >
-                      <p style={{ margin: 0, color: "#334a62" }}>
-                        Expires {new Date(share.expiresAt).toLocaleString()} • {share.isActive ? "Active" : "Inactive"}
+                      <p className="muted-text" style={{ margin: 0 }}>
+                        Expires {new Date(share.expiresAt).toLocaleString()} &bull; {share.isActive ? "Active" : "Inactive"}
                       </p>
                       <p style={{ margin: "8px 0", color: "#667085", fontSize: "14px" }}>
-                        Public URL is only shown once at creation time for security. Create a new link if you need to
-                        reshare it.
+                        Public URL is only shown once at creation time for security.
                       </p>
                       {share.revokedAt ? (
-                        <p style={{ margin: 0, color: "#334a62" }}>
+                        <p className="muted-text" style={{ margin: 0 }}>
                           Revoked {new Date(share.revokedAt).toLocaleString()}
                         </p>
                       ) : (
@@ -106,21 +105,12 @@ export default async function StudentReportPage(): Promise<JSX.Element> {
                   ))}
                 </div>
               ) : (
-                <p style={{ margin: 0, color: "#334a62" }}>No parent share links have been created yet.</p>
+                <p className="muted-text" style={{ margin: 0 }}>No parent share links have been created yet.</p>
               )}
-            </Card>
+            </SurfaceCard>
           </>
         ) : null}
-      </section>
-    </main>
-  );
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
-  return (
-    <article style={{ background: "#fff", border: "1px solid #d8e1eb", borderRadius: "14px", padding: "18px" }}>
-      <h2 style={{ marginTop: 0 }}>{title}</h2>
-      {children}
-    </article>
+      </div>
+    </AppPage>
   );
 }

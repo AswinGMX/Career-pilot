@@ -14,13 +14,17 @@ import {
 } from "@prisma/client";
 
 import type {
+  DimensionDetail,
+  GenerateQuestionsResponse,
+  ProfileAssessmentResult,
   ProofAnswerInput,
   ProofQuestion,
   ProofQuestionSet,
   ProofResult,
   ProofSessionListResponse,
   ProofSessionRecord,
-  ProofSessionResponse
+  ProofSessionResponse,
+  SubmitProfileAssessmentResponse
 } from "@career-pilot/types";
 
 import { GeminiService } from "../ai/gemini.service";
@@ -284,6 +288,316 @@ export class AssessmentsService {
 
     return {
       session: this.serializeProofSession(stored)
+    };
+  }
+
+  async generateQuestionsFromProfile(token: string | undefined): Promise<GenerateQuestionsResponse> {
+    const session = await this.requireStudentSession(token);
+    const profile = await this.prisma.studentProfile.findUnique({
+      where: { userId: session.user.id },
+      include: { versions: { orderBy: { createdAt: "desc" } } }
+    });
+
+    if (!profile) {
+      throw new BadRequestException("A student profile is required first.");
+    }
+
+    const hasContent =
+      this.fromJsonArray(profile.favoriteSubjects).length > 0 ||
+      this.fromJsonArray(profile.favoriteActivities).length > 0 ||
+      this.fromJsonArray(profile.personalStrengths).length > 0;
+
+    if (!hasContent) {
+      throw new BadRequestException("Please fill in at least your favorite subjects, activities, or strengths before generating questions.");
+    }
+
+    // Return cached questions if available
+    const cached = this.readQuestionSetFromCache(profile.assessmentQuestionsJson);
+    if (cached) {
+      console.log("Returning cached questions");
+      return { questionSet: cached };
+    }
+
+    const questionSet = await this.generateProfileBasedQuestions(profile);
+
+    // Cache the generated questions
+    await this.prisma.studentProfile.update({
+      where: { id: profile.id },
+      data: { assessmentQuestionsJson: questionSet as unknown as Prisma.InputJsonValue }
+    });
+
+    return { questionSet };
+  }
+
+  private readQuestionSetFromCache(value: Prisma.JsonValue | null | undefined): ProofQuestionSet | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const raw = value as Record<string, unknown>;
+    if (!Array.isArray(raw.questions) || raw.questions.length === 0) return null;
+    return this.readQuestionSet(value);
+  }
+
+  async scoreProfileAssessment(
+    token: string | undefined,
+    questions: ProofQuestion[],
+    answers: ProofAnswerInput[]
+  ): Promise<SubmitProfileAssessmentResponse> {
+    const session = await this.requireStudentSession(token);
+
+    if (answers.length !== questions.length) {
+      throw new BadRequestException("All questions must be answered.");
+    }
+
+    const profile = await this.prisma.studentProfile.findUnique({
+      where: { userId: session.user.id },
+      include: { versions: { orderBy: { createdAt: "desc" } } }
+    });
+
+    const scoreScale = [20, 45, 75, 95];
+    const dimensionScores: Record<string, number[]> = {};
+
+    questions.forEach((question) => {
+      const answer = answers.find((item) => item.questionId === question.id);
+      const index = Math.max(0, Math.min(answer?.optionIndex ?? 1, 3));
+
+      if (!dimensionScores[question.dimension]) {
+        dimensionScores[question.dimension] = [];
+      }
+
+      dimensionScores[question.dimension].push(scoreScale[index]);
+    });
+
+    const normalizedDimensionScores = Object.entries(dimensionScores).reduce<Record<string, number>>(
+      (scores, [key, values]) => {
+        scores[key] = Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+        return scores;
+      },
+      {}
+    );
+
+    const allScores = Object.values(normalizedDimensionScores);
+    const overallScore = Math.round(allScores.reduce((sum, value) => sum + value, 0) / Math.max(allScores.length, 1));
+    const readinessBand =
+      overallScore >= 82
+        ? "Strong readiness"
+        : overallScore >= 65
+          ? "Promising readiness"
+          : overallScore >= 48
+            ? "Developing readiness"
+            : "Low readiness";
+
+    const ranked = Object.entries(normalizedDimensionScores).sort((left, right) => right[1] - left[1]);
+    const strengths = ranked.filter(([, s]) => s >= 65).map(([d]) => this.labelize(d));
+    const risks = ranked.filter(([, s]) => s < 65).map(([d]) => this.labelize(d));
+
+    const dimKeys = Object.keys(normalizedDimensionScores);
+    const profileSubjects = profile ? this.fromJsonArray(profile.favoriteSubjects).join(", ") : "";
+    const profileStrengths = profile ? this.fromJsonArray(profile.personalStrengths).join(", ") : "";
+    const profileDislikes = profile ? this.fromJsonArray(profile.avoidsOrDislikes).join(", ") : "";
+
+    const answerSummary = answers.map((a) => {
+      const q = questions.find((qu) => qu.id === a.questionId);
+      return `${q?.dimension}: "${q?.options[a.optionIndex]}"`;
+    }).join("; ");
+
+    const aiResult = await this.geminiService.generateStructuredJson<{
+      narrative: string;
+      detailedReadout: string[];
+      dimensions: Array<{ dimension: string; description: string }>;
+    }>({
+      systemInstruction: "You are a student character profiler. Be honest, specific, encouraging. Return only valid JSON.",
+      prompt: `Analyze ${session.user.fullName}'s assessment. Score: ${overallScore}/100 (${readinessBand}).
+Likes: ${profileSubjects}. Strengths: ${profileStrengths}. Avoids: ${profileDislikes}.
+Scores: ${dimKeys.map((d) => `${d}=${normalizedDimensionScores[d]}%`).join(", ")}.
+Answers: ${answerSummary}.
+
+Return JSON: {"narrative":"2-3 sentences about ${session.user.fullName} mentioning their interests","detailedReadout":["2-4 specific observations"],"dimensions":[${dimKeys.map((d) => `{"dimension":"${d}","description":"1 sentence for this student"}`).join(",")}]}`,
+      schema: {},
+      temperature: 0.7
+    }).catch((err) => {
+      console.error("Gemini scoring call failed:", err?.message || err);
+      return null;
+    });
+
+    const dimensionDetails: DimensionDetail[] = Object.entries(normalizedDimensionScores).map(([dim, score]) => {
+      const dimLower = dim.toLowerCase().replace(/[\s_-]+/g, "");
+      const aiDim = aiResult?.dimensions?.find(
+        (d) => d.dimension.toLowerCase().replace(/[\s_-]+/g, "") === dimLower
+      );
+      return {
+        dimension: this.labelize(dim),
+        score,
+        description: aiDim?.description || `Scored ${score}% in ${this.labelize(dim)}.`,
+        type: score >= 65 ? "dominant" as const : "caution" as const
+      };
+    });
+
+    const result: ProfileAssessmentResult = {
+      overallScore,
+      readinessBand,
+      dimensionScores: normalizedDimensionScores,
+      dimensions: dimensionDetails,
+      strengths,
+      risks,
+      narrative: aiResult?.narrative
+        || `${session.user.fullName} shows ${readinessBand.toLowerCase()}. Strongest areas: ${strengths.slice(0, 2).join(" and ") || "developing"}. Areas to grow: ${risks.slice(0, 2).join(" and ") || "none identified"}.`,
+      detailedReadout: aiResult?.detailedReadout
+        || [`May benefit from focused practice in ${risks[0] || "consistency"}.`],
+      nextSteps: [
+        `Practice a weekly habit that improves ${risks[0] || "consistency"}.`,
+        `Keep building on ${strengths[0] || "discipline"} through real responsibilities.`,
+        "Explore careers that match your strengths and retake this assessment after growth."
+      ]
+    };
+
+    // Cache the result on the profile
+    const profileForCache = await this.prisma.studentProfile.findUnique({ where: { userId: session.user.id } });
+    if (profileForCache) {
+      await this.prisma.studentProfile.update({
+        where: { id: profileForCache.id },
+        data: { assessmentResultJson: result as unknown as Prisma.InputJsonValue }
+      });
+    }
+
+    return { result };
+  }
+
+  private async generateProfileBasedQuestions(profile: ProfileRecord): Promise<ProofQuestionSet> {
+    const fallback = this.buildFallbackProfileQuestionSet();
+
+    console.log("Gemini isConfigured:", this.geminiService.isConfigured());
+
+    const subjects = this.fromJsonArray(profile.favoriteSubjects).join(", ");
+    const activities = this.fromJsonArray(profile.favoriteActivities).join(", ");
+    const strengths = this.fromJsonArray(profile.personalStrengths).join(", ");
+    const dislikes = this.fromJsonArray(profile.avoidsOrDislikes).join(", ");
+    const curious = this.fromJsonArray(profile.topicsCuriousAbout).join(", ");
+
+    const aiResponse = await this.geminiService.generateStructuredJson<ProofQuestionSet>({
+      systemInstruction: "You generate behavioral assessment questions for students. Return only valid JSON.",
+      prompt: `Generate ${proofQuestionCount} behavioral questions for a grade ${profile.gradeLevel || "unknown"} student (age ${profile.ageBand || "unknown"}).
+Profile: likes ${subjects || "various subjects"}, enjoys ${activities || "various activities"}, curious about ${curious || "many things"}, strengths: ${strengths || "developing"}, avoids: ${dislikes || "nothing specific"}.
+Each question tests mindset, behavior, or emotional readiness — not trivia. 4 options each, ordered least to most ready.
+
+Return JSON: {"source":"gemini","introduction":"...","questions":[{"id":"q1","dimension":"one word like discipline","question":"...","whyItMatters":"...","options":["least ready","...","...","most ready"]}]}
+Exactly ${proofQuestionCount} questions.`,
+      schema: {},
+      temperature: 0.8
+    }).catch((err) => {
+      console.error("Gemini question generation failed:", err?.message || err);
+      return null;
+    });
+
+    if (!aiResponse?.questions?.length) {
+      console.warn("No AI questions returned, using fallback");
+      return fallback;
+    }
+
+    return {
+      source: "gemini",
+      introduction: aiResponse.introduction,
+      questions: aiResponse.questions.slice(0, proofQuestionCount)
+    };
+  }
+
+  private buildFallbackProfileQuestionSet(): ProofQuestionSet {
+    const questionTemplates: Array<Omit<ProofQuestion, "id">> = [
+      {
+        dimension: "discipline",
+        question: "If you had to follow a strict daily routine for 60 days with no breaks, how would you handle it?",
+        whyItMatters: "Long-term consistency matters more than short bursts of excitement.",
+        options: [
+          "I would lose interest quickly and stop following it.",
+          "I could try but would need someone pushing me constantly.",
+          "I would mostly stay on track with occasional support.",
+          "I can stay disciplined even when the routine becomes boring."
+        ]
+      },
+      {
+        dimension: "independence",
+        question: "How comfortable are you working on something important entirely on your own, without guidance?",
+        whyItMatters: "Independence is key to handling real-world responsibilities.",
+        options: [
+          "I struggle without clear instructions from someone.",
+          "I can manage simple tasks but need help with anything complex.",
+          "I can figure most things out if I have time to think.",
+          "I am comfortable leading myself through unfamiliar challenges."
+        ]
+      },
+      {
+        dimension: "pressure",
+        question: "When the stakes are high and mistakes have consequences, what happens to your focus?",
+        whyItMatters: "Handling pressure calmly is essential for any serious responsibility.",
+        options: [
+          "I freeze or avoid the situation entirely.",
+          "I get overwhelmed and need someone else to take charge.",
+          "I feel the pressure but can still think and act carefully.",
+          "Pressure sharpens my focus and makes me more deliberate."
+        ]
+      },
+      {
+        dimension: "adaptability",
+        question: "If your plan suddenly fell apart and you had to improvise, how would you respond?",
+        whyItMatters: "Adaptability determines how well you handle uncertainty.",
+        options: [
+          "I get frustrated and struggle to move forward.",
+          "I need a long time before I can adjust to the change.",
+          "I can adapt after a short reset and some thought.",
+          "I adjust quickly and keep moving without losing composure."
+        ]
+      },
+      {
+        dimension: "communication",
+        question: "If you had to explain a difficult situation to someone who was upset, what would you do?",
+        whyItMatters: "Clear communication under stress is critical in real situations.",
+        options: [
+          "I would avoid the conversation if I could.",
+          "I would speak but probably become defensive or unclear.",
+          "I would stay respectful and explain the basics calmly.",
+          "I would listen first, then explain clearly and thoughtfully."
+        ]
+      },
+      {
+        dimension: "service",
+        question: "How willing are you to keep working when the task is uncomfortable or unrewarding?",
+        whyItMatters: "Service mindset separates short-term excitement from real commitment.",
+        options: [
+          "I mostly stop when things become uncomfortable.",
+          "I try but my motivation drops fast if it feels hard.",
+          "I can continue if I remember why the work matters.",
+          "I stay committed even when the work is tiring or thankless."
+        ]
+      },
+      {
+        dimension: "ethics",
+        question: "If taking a shortcut would make your life easier but could quietly harm someone's trust, what would you do?",
+        whyItMatters: "Ethical judgment matters in every part of life.",
+        options: [
+          "I would probably take the shortcut if no one noticed.",
+          "I might take it if I was under enough pressure.",
+          "I would hesitate and likely choose the harder but fair path.",
+          "I would reject it and protect trust even at a cost to myself."
+        ]
+      },
+      {
+        dimension: "resilience",
+        question: "After a disappointing failure, how do you typically respond in the following days?",
+        whyItMatters: "Resilience determines whether setbacks become permanent or temporary.",
+        options: [
+          "I lose confidence and stop trying for a while.",
+          "I doubt myself and slow down significantly.",
+          "I reflect on what happened and try again with adjustments.",
+          "I use the setback as feedback and come back stronger."
+        ]
+      }
+    ];
+
+    return {
+      source: "fallback",
+      introduction: "This behavioral assessment helps understand your readiness, mindset, and personal strengths based on your profile.",
+      questions: questionTemplates.slice(0, proofQuestionCount).map((question, index) => ({
+        id: `profile-assessment-${index + 1}`,
+        ...question
+      }))
     };
   }
 

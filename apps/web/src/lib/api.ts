@@ -3,6 +3,7 @@ import type {
   CareerCategoriesResponse,
   CareerDetailResponse,
   CareerListResponse,
+  GenerateQuestionsResponse,
   ParentSharedReportResponse,
   ProfileSubmitResponse,
   ProfileUpdatePayload,
@@ -23,23 +24,17 @@ import type {
   StudentProfileResponse,
   StudentShareCreatePayload,
   StudentShareCreateResponse,
-  StudentShareRevokeResponse
+  StudentShareRevokeResponse,
+  SubmitProfileAssessmentPayload,
+  SubmitProfileAssessmentResponse
 } from "@career-pilot/types";
 
 function getApiBaseUrl(): string {
-  const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/v1";
-
-  if (typeof window === "undefined") {
-    return process.env.INTERNAL_API_BASE_URL || configuredBaseUrl;
+  if (typeof window !== "undefined") {
+    return "/api";
   }
 
-  try {
-    const url = new URL(configuredBaseUrl);
-    url.hostname = window.location.hostname;
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return configuredBaseUrl;
-  }
+  return process.env.INTERNAL_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:4000/v1";
 }
 
 export async function getSession(cookieHeader?: string): Promise<AuthMeResponse> {
@@ -121,6 +116,54 @@ export async function submitStudentProfile(): Promise<ProfileSubmitResponse> {
 
   if (!response.ok) {
     throw new Error(json.error || json.message || "Profile submission failed.");
+  }
+
+  return json;
+}
+
+export async function generateAssessmentQuestions(): Promise<GenerateQuestionsResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/assessments/generate-questions`, {
+    method: "POST",
+    credentials: "include"
+  });
+
+  const text = await response.text();
+  let json: GenerateQuestionsResponse & { message?: string; error?: string };
+
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error("AI service temporarily unavailable. Please try again.");
+  }
+
+  if (!response.ok) {
+    throw new Error(json.error || json.message || "Unable to generate questions.");
+  }
+
+  return json;
+}
+
+export async function submitProfileAssessment(payload: SubmitProfileAssessmentPayload): Promise<SubmitProfileAssessmentResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/assessments/score-profile-assessment`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  let json: SubmitProfileAssessmentResponse & { message?: string; error?: string };
+
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error("AI service temporarily unavailable. Please try again.");
+  }
+
+  if (!response.ok) {
+    throw new Error(json.error || json.message || "Unable to score assessment.");
   }
 
   return json;

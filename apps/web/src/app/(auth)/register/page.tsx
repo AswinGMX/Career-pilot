@@ -1,32 +1,28 @@
 import Link from "next/link";
 
 import { redirectIfAuthenticated } from "@/lib/session";
-import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
+import { LandingLayout } from "@/components/landing-layout";
 
-import { RegisterForm } from "../AuthForm";
+import { LandingRegisterForm } from "../AuthForm";
 
 export default async function RegisterPage(): Promise<JSX.Element> {
   await redirectIfAuthenticated();
 
   return (
-    <AppPage>
-      <Hero
-        eyebrow="Authentication"
-        title="Create your workspace"
-        subtitle={
-          <p style={{ margin: 0 }}>
-            Start as an individual student, a school admin, or join an existing school as a student.
-          </p>
-        }
-      />
-      <div className="section-stack">
-        <SurfaceCard title="Register">
-          <RegisterForm />
-          <p style={{ marginTop: "16px" }}>
-            <Link href="/login">Already have an account?</Link>
-          </p>
-        </SurfaceCard>
+    <LandingLayout>
+      <p className="landing-greeting">Hello!</p>
+      <p className="landing-greeting-highlight">Get Started 🚀</p>
+      <h2 className="landing-form-title">Create Your Account</h2>
+      <p className="landing-form-subtitle">
+        Join Career Pilot and start exploring your future today.
+      </p>
+
+      <LandingRegisterForm />
+
+      <div className="landing-form-footer">
+        <span className="footer-muted">Already have an account?</span>
+        <Link href="/login">Sign In →</Link>
       </div>
-    </AppPage>
+    </LandingLayout>
   );
 }

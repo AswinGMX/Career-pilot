@@ -11,27 +11,37 @@ export const dynamic = "force-dynamic";
 export default async function StudentProfilePage(): Promise<JSX.Element> {
   const session = await requireStudent();
   const response = await getStudentProfile(getServerSessionCookieHeader());
+  const isCompleted = response.profile?.completionStatus === "submitted";
 
   return (
     <AppPage>
       <Hero
-        eyebrow="Student profile"
-        title="Build your signal profile"
+        eyebrow="AI Profile Studio"
+        title="Build the student character profile"
         subtitle={
           <p style={{ margin: 0 }}>
-            This profile drives recommendations and later assessment generation for {session.user.fullName}.
+            Your profile details and assessment are saved. The detailed personality analysis is shown below.
           </p>
         }
         actions={
-          <Link className="button-secondary" href="/student/dashboard">
-            Back to dashboard
-          </Link>
+          <>
+            {isCompleted ? (
+              <span className="status-chip" style={{ background: "rgba(22,163,74,0.1)", color: "#16a34a", fontWeight: 600 }}>
+                Profile completed
+              </span>
+            ) : null}
+            <Link className="button-secondary" href="/student/dashboard">
+              Back to dashboard
+            </Link>
+          </>
         }
       />
       <div className="section-stack">
-        <SurfaceCard title="Profile inputs">
-          <ProfileForm initialProfile={response.profile} />
-        </SurfaceCard>
+        <ProfileForm
+          initialProfile={response.profile}
+          studentName={session.user.fullName}
+          initialAssessmentResult={response.profile?.cachedAssessmentResult ?? null}
+        />
       </div>
     </AppPage>
   );

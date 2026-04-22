@@ -114,6 +114,7 @@ export interface StudentProfile {
   createdAt: string;
   updatedAt: string;
   versionCount: number;
+  cachedAssessmentResult: ProfileAssessmentResult | null;
 }
 
 export interface StudentProfileResponse {
@@ -443,4 +444,36 @@ export interface SchoolGenerateReportResponse {
   ok: boolean;
   tenant: SessionTenantSummary;
   report: SchoolReportRecord;
+}
+
+export interface GenerateQuestionsResponse {
+  questionSet: ProofQuestionSet;
+}
+
+export interface DimensionDetail {
+  dimension: string;
+  score: number;
+  description: string;
+  type: "dominant" | "caution";
+}
+
+export interface ProfileAssessmentResult {
+  overallScore: number;
+  readinessBand: string;
+  dimensionScores: Record<string, number>;
+  dimensions: DimensionDetail[];
+  strengths: string[];
+  risks: string[];
+  narrative: string;
+  detailedReadout: string[];
+  nextSteps: string[];
+}
+
+export interface SubmitProfileAssessmentPayload {
+  questions: ProofQuestion[];
+  answers: ProofAnswerInput[];
+}
+
+export interface SubmitProfileAssessmentResponse {
+  result: ProfileAssessmentResult;
 }

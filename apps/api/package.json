@@ -2,11 +2,15 @@
   "name": "@career-pilot/api",
   "version": "0.1.0",
   "private": true,
+  "prisma": {
+    "seed": "ts-node --project tsconfig.json prisma/seed-careers.ts"
+  },
   "scripts": {
     "dev": "ts-node --project tsconfig.json src/main.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed:careers": "ts-node --project tsconfig.json prisma/seed-careers.ts",
+    "seed:demo": "ts-node --project tsconfig.json prisma/seed-demo.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "lint": "node -e \"console.log('api lint placeholder')\"",

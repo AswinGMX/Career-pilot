@@ -1,22 +1,28 @@
 import Link from "next/link";
 
-import { ForgotPasswordForm } from "../AuthForm";
 import { redirectIfAuthenticated } from "@/lib/session";
+import { LandingLayout } from "@/components/landing-layout";
+
+import { LandingForgotPasswordForm } from "../AuthForm";
 
 export default async function ForgotPasswordPage(): Promise<JSX.Element> {
   await redirectIfAuthenticated();
 
   return (
-    <main style={{ maxWidth: "720px", margin: "0 auto", padding: "48px 24px" }}>
-      <p style={{ textTransform: "uppercase", letterSpacing: "0.08em", color: "#4b6480", fontSize: "12px" }}>Auth</p>
-      <h1 style={{ marginTop: "8px", fontSize: "36px" }}>Forgot password</h1>
-      <p style={{ color: "#334a62", lineHeight: 1.6 }}>
-        Request a password reset token from the new NestJS auth service.
+    <LandingLayout>
+      <p className="landing-greeting">Hello!</p>
+      <p className="landing-greeting-highlight">Reset Password 🔑</p>
+      <h2 className="landing-form-title">Forgot Your Password?</h2>
+      <p className="landing-form-subtitle">
+        Enter your email and we&apos;ll send you a reset token.
       </p>
-      <ForgotPasswordForm />
-      <p style={{ marginTop: "16px" }}>
-        <Link href="/login">Back to login</Link>
-      </p>
-    </main>
+
+      <LandingForgotPasswordForm />
+
+      <div className="landing-form-footer">
+        <Link href="/login">← Back to Login</Link>
+        <Link href="/register">Create Account →</Link>
+      </div>
+    </LandingLayout>
   );
 }

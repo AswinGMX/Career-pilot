@@ -21,13 +21,7 @@
     "infra:local:start": "sh scripts/start-local-infra.sh",
     "infra:local:stop": "sh scripts/stop-local-infra.sh",
     "setup:local": "sh scripts/local-bootstrap.sh",
-    "legacy:dev": "node scripts/dev.js",
-    "legacy:start": "node server.js",
-    "legacy:server": "node server.js",
-    "legacy:client": "vite",
-    "legacy:build": "tsc -b && vite build",
-    "legacy:preview": "vite preview",
-    "legacy:typecheck": "tsc -b"
+    "legacy:preview": "vite preview"
   },
   "dependencies": {
     "react": "^18.3.1",

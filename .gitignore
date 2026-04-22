@@ -19,8 +19,10 @@ vite.config.d.ts
 !.env.example
 
 # Local app/runtime data
-data/app-db.json
 .runtime/
+
+# Generated report exports
+apps/api/.generated-reports/
 
 # Logs
 npm-debug.log*

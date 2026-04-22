@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
-import { MembershipRole, ProfileCompletionStatus, type Prisma } from "@prisma/client";
+import { MembershipRole, Prisma, ProfileCompletionStatus } from "@prisma/client";
 
 import type {
   ProfileSubmitResponse,
@@ -77,7 +77,7 @@ export class ProfileService {
       const stored = existing
         ? await tx.studentProfile.update({
             where: { id: existing.id },
-            data
+            data: { ...data, assessmentQuestionsJson: Prisma.JsonNull, assessmentResultJson: Prisma.JsonNull }
           })
         : await tx.studentProfile.create({
             data
@@ -248,8 +248,16 @@ export class ProfileService {
       submittedAt: profile.submittedAt?.toISOString() || null,
       createdAt: profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
-      versionCount: profile.versions.length
+      versionCount: profile.versions.length,
+      cachedAssessmentResult: this.parseAssessmentResult(profile.assessmentResultJson)
     };
+  }
+
+  private parseAssessmentResult(value: Prisma.JsonValue | null | undefined): import("@career-pilot/types").ProfileAssessmentResult | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const raw = value as Record<string, unknown>;
+    if (typeof raw.overallScore !== "number") return null;
+    return raw as unknown as import("@career-pilot/types").ProfileAssessmentResult;
   }
 
   private fromJsonArray(value: Prisma.JsonValue | null): string[] {

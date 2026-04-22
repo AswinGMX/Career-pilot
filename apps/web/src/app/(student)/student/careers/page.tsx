@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getCareerCategories, getCareers } from "@/lib/api";
+import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
 import { requireStudent } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -20,69 +21,60 @@ export default async function CareersPage({
   ]);
 
   return (
-    <main style={{ maxWidth: "1100px", margin: "0 auto", padding: "48px 24px" }}>
-      <p style={{ textTransform: "uppercase", letterSpacing: "0.08em", color: "#4b6480", fontSize: "12px" }}>
-        Student
-      </p>
-      <h1 style={{ marginTop: "8px", fontSize: "36px" }}>Career catalog</h1>
-      <p style={{ color: "#334a62", lineHeight: 1.6 }}>
-        This is the new managed career library backed by relational data and stable APIs.
-      </p>
+    <AppPage>
+      <Hero
+        eyebrow="Student"
+        title="Career catalog"
+        subtitle={<p style={{ margin: 0 }}>Explore the managed career library backed by relational data and stable APIs.</p>}
+      />
 
-      <form method="GET" style={{ display: "flex", gap: "12px", marginTop: "24px", flexWrap: "wrap" }}>
-        <input
-          name="q"
-          defaultValue={query}
-          placeholder="Search careers"
-          style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid #c6d4e1", minWidth: "240px" }}
-        />
-        <select
-          name="category"
-          defaultValue={category}
-          style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid #c6d4e1", minWidth: "220px" }}
-        >
-          <option value="">All categories</option>
-          {categories.categories.map((item) => (
-            <option key={item.id} value={item.slug}>
-              {item.name} ({item.count})
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          style={{ padding: "12px 16px", borderRadius: "10px", border: 0, background: "#142033", color: "#fff" }}
-        >
-          Search
-        </button>
-      </form>
-
-      <p style={{ marginTop: "20px", color: "#4b6480" }}>
-        Showing {careers.items.length} of {careers.total} careers.
-      </p>
-
-      <div
-        style={{
-          marginTop: "20px",
-          display: "grid",
-          gap: "16px",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))"
-        }}
-      >
-        {careers.items.map((career) => (
-          <article
-            key={career.id}
-            style={{ background: "#fff", border: "1px solid #d8e1eb", borderRadius: "14px", padding: "18px" }}
+      <div className="section-stack">
+        <form method="GET" className="surface-card" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          <input
+            name="q"
+            defaultValue={query}
+            placeholder="Search careers"
+            className="field-control"
+            style={{ minWidth: "240px" }}
+          />
+          <select
+            name="category"
+            defaultValue={category}
+            className="field-control"
+            style={{ minWidth: "220px" }}
           >
-            <p style={{ margin: 0, fontSize: "12px", color: "#4b6480", textTransform: "uppercase" }}>{career.category.name}</p>
-            <h2 style={{ margin: "10px 0 8px", fontSize: "22px" }}>{career.title}</h2>
-            <p style={{ margin: 0, color: "#334a62", lineHeight: 1.6 }}>{career.summary}</p>
-            <p style={{ marginTop: "12px", color: "#4b6480" }}>
-              Skills: {career.skills.slice(0, 3).join(", ") || "Not available"}
-            </p>
-            <Link href={`/student/careers/${career.slug}`}>Open detail</Link>
-          </article>
-        ))}
+            <option value="">All categories</option>
+            {categories.categories.map((item) => (
+              <option key={item.id} value={item.slug}>
+                {item.name} ({item.count})
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="button-primary">
+            Search
+          </button>
+        </form>
+
+        <p className="muted-text" style={{ margin: 0 }}>
+          Showing {careers.items.length} of {careers.total} careers.
+        </p>
+
+        <div className="panel-grid panel-grid--cards">
+          {careers.items.map((career) => (
+            <SurfaceCard key={career.id}>
+              <p className="app-eyebrow">{career.category.name}</p>
+              <h2 style={{ margin: "10px 0 8px", fontSize: "1.4rem", lineHeight: 1.1 }}>{career.title}</h2>
+              <p className="muted-text" style={{ margin: 0 }}>{career.summary}</p>
+              <p className="muted-text" style={{ marginTop: "12px" }}>
+                Skills: {career.skills.slice(0, 3).join(", ") || "Not available"}
+              </p>
+              <p style={{ marginTop: "12px" }}>
+                <Link href={`/student/careers/${career.slug}`}>Open detail</Link>
+              </p>
+            </SurfaceCard>
+          ))}
+        </div>
       </div>
-    </main>
+    </AppPage>
   );
 }
