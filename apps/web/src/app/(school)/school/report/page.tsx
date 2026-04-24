@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { getLatestSchoolReport } from "@/lib/api";
 import { AppPage, Hero, MetricCard, SurfaceCard } from "@/components/page-chrome";
-import { requireSchoolAdmin } from "@/lib/session";
+import { getServerSessionCookieHeader, requireSchoolAdmin } from "@/lib/session";
 
 import { GenerateSchoolReportButton } from "./GenerateSchoolReportButton";
 
@@ -16,7 +16,7 @@ export default async function SchoolReportPage(): Promise<JSX.Element> {
     notFound();
   }
 
-  const response = await getLatestSchoolReport(tenantId);
+  const response = await getLatestSchoolReport(tenantId, getServerSessionCookieHeader());
   const report = response?.report || null;
 
   return (

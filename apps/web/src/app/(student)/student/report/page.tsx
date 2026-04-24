@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { getLatestStudentReport } from "@/lib/api";
 import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
-import { requireStudent } from "@/lib/session";
+import { getServerSessionCookieHeader, requireStudent } from "@/lib/session";
 
 import { CreateParentShareButton, GenerateStudentReportButton, RevokeShareButton } from "./ReportActions";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function StudentReportPage(): Promise<JSX.Element> {
   const session = await requireStudent();
-  const response = await getLatestStudentReport();
+  const response = await getLatestStudentReport(getServerSessionCookieHeader());
   const report = response.report;
 
   return (

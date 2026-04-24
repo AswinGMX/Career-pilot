@@ -4,6 +4,9 @@ import type {
   CareerDetailResponse,
   CareerListResponse,
   GenerateQuestionsResponse,
+  McqGeneratePayload,
+  McqSetResponse,
+  McqSetsListResponse,
   ParentSharedReportResponse,
   ProfileSubmitResponse,
   ProfileUpdatePayload,
@@ -261,10 +264,24 @@ export async function recomputeRecommendations(): Promise<RecommendationRecomput
     credentials: "include"
   });
 
-  const json = (await response.json()) as RecommendationRecomputeResponse & { message?: string; error?: string };
+  const text = await response.text();
+  let json: (RecommendationRecomputeResponse & { message?: string; error?: string }) | null = null;
+
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(json.error || json.message || "Recommendation recompute failed.");
+    const message = json?.error || json?.message || text?.trim() || `Recommendation recompute failed (HTTP ${response.status}).`;
+    throw new Error(message);
+  }
+
+  if (!json) {
+    throw new Error("Recommendation recompute returned an invalid response.");
   }
 
   return json;
@@ -575,4 +592,67 @@ export async function generateSchoolReport(tenantId: string): Promise<SchoolGene
   }
 
   return json;
+}
+
+export async function generateMcqSet(payload: McqGeneratePayload): Promise<McqSetResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/mcq/generate`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const json = (await response.json()) as McqSetResponse & { message?: string; error?: string };
+
+  if (!response.ok) {
+    throw new Error(json.error || json.message || "Unable to generate MCQ set.");
+  }
+
+  return json;
+}
+
+export async function getMcqSet(setId: string, cookieHeader?: string): Promise<McqSetResponse | null> {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/mcq/${setId}`, {
+      cache: "no-store",
+      credentials: "include",
+      headers: cookieHeader
+        ? {
+            cookie: cookieHeader
+          }
+        : undefined
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as McqSetResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function listMcqSets(cookieHeader?: string): Promise<McqSetsListResponse> {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/mcq/sets`, {
+      cache: "no-store",
+      credentials: "include",
+      headers: cookieHeader
+        ? {
+            cookie: cookieHeader
+          }
+        : undefined
+    });
+
+    if (!response.ok) {
+      return { sets: [] };
+    }
+
+    return (await response.json()) as McqSetsListResponse;
+  } catch {
+    return { sets: [] };
+  }
 }

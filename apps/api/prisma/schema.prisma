@@ -70,6 +70,12 @@ enum ReportStatus {
   failed
 }
 
+enum McqSource {
+  gemini
+  cache
+  fallback
+}
+
 model Tenant {
   id          String             @id @default(uuid()) @db.Uuid
   name        String
@@ -100,6 +106,7 @@ model User {
   recommendationSnapshots RecommendationSnapshot[]
   proofSessions       ProofSession[]
   reports             Report[]
+  mcqSets             McqSet[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 }
@@ -225,6 +232,7 @@ model StudentProfile {
   versions           ProfileVersion[]
   recommendationSnapshots RecommendationSnapshot[]
   proofSessions      ProofSession[]
+  mcqSets            McqSet[]
 
   @@index([tenantId])
 }
@@ -317,4 +325,54 @@ model ReportShare {
 
   @@index([reportId, createdAt])
   @@index([expiresAt])
+}
+
+model McqSet {
+  id               String          @id @default(uuid()) @db.Uuid
+  userId           String          @db.Uuid
+  studentProfileId String?         @db.Uuid
+  cacheKey         String
+  source           McqSource
+  grade            Int
+  subject          String
+  audience         String
+  weakTopics       String
+  level            Int
+  count            Int
+  createdAt        DateTime        @default(now())
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile          StudentProfile? @relation(fields: [studentProfileId], references: [id], onDelete: SetNull)
+  items            McqItem[]
+
+  @@index([userId, createdAt])
+  @@index([cacheKey, createdAt])
+}
+
+model McqItem {
+  id            String      @id @default(uuid()) @db.Uuid
+  setId         String      @db.Uuid
+  orderIndex    Int
+  tag           String
+  difficulty    Int
+  stem          String
+  explanation   String
+  correctLetter String
+  set           McqSet      @relation(fields: [setId], references: [id], onDelete: Cascade)
+  options       McqOption[]
+
+  @@unique([setId, orderIndex])
+  @@index([setId])
+}
+
+model McqOption {
+  id         String  @id @default(uuid()) @db.Uuid
+  itemId     String  @db.Uuid
+  letter     String
+  orderIndex Int
+  text       String
+  isCorrect  Boolean
+  item       McqItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, letter])
+  @@index([itemId])
 }

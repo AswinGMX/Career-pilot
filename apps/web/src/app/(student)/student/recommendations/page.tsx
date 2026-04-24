@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { getLatestRecommendations } from "@/lib/api";
 import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
-import { requireStudent } from "@/lib/session";
+import { getServerSessionCookieHeader, requireStudent } from "@/lib/session";
 
 import { RecomputeRecommendationsButton } from "./RecomputeRecommendationsButton";
 
@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 export default async function StudentRecommendationsPage(): Promise<JSX.Element> {
   await requireStudent();
-  const response = await getLatestRecommendations();
+  const cookieHeader = getServerSessionCookieHeader();
+  const response = await getLatestRecommendations(cookieHeader);
   const snapshot = response.snapshot;
 
   return (
@@ -51,30 +52,45 @@ export default async function StudentRecommendationsPage(): Promise<JSX.Element>
           <div className="panel-grid panel-grid--cards">
             {snapshot.items.map((item) => (
               <SurfaceCard key={item.career.id}>
-                <p className="app-eyebrow">
-                  Rank {item.rank} • {item.fitLabel} fit • score {item.fitScore}
-                </p>
-                <h2 style={{ margin: "10px 0 8px", fontSize: "2rem", lineHeight: 1 }}>{item.career.title}</h2>
-                <p className="muted-text" style={{ margin: 0 }}>{item.explanation}</p>
+                <div className="match-badge-row">
+                  <span className={`fit-badge fit-badge--${item.fitLabel}`}>
+                    Rank #{item.rank} · {item.fitLabel} fit · {item.fitScore}
+                  </span>
+                </div>
+                <h2 style={{ margin: "10px 0 4px", fontSize: "1.6rem", lineHeight: 1.15 }}>{item.career.title}</h2>
+                <p className="muted-text" style={{ fontSize: 13, margin: 0 }}>{item.career.category.name}</p>
+                <p className="muted-text" style={{ margin: "10px 0 0", lineHeight: 1.65 }}>{item.explanation}</p>
 
-                <section style={{ marginTop: "14px" }}>
-                  <h3 style={{ marginBottom: "8px" }}>Reasons</h3>
-                  <ul className="content-list">
-                    {item.reasons.map((reason) => (
-                      <li key={reason}>{reason}</li>
-                    ))}
-                  </ul>
-                </section>
+                {item.reasons.length > 0 ? (
+                  <section style={{ marginTop: "14px" }}>
+                    <h3 style={{ marginBottom: "8px", fontSize: "0.95rem" }}>Why this fits</h3>
+                    <ul className="content-list" style={{ fontSize: 14 }}>
+                      {item.reasons.slice(0, 3).map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
 
-                <section style={{ marginTop: "14px" }}>
-                  <h3 style={{ marginBottom: "8px" }}>Evidence from profile</h3>
-                  <p className="muted-text" style={{ margin: 0 }}>
-                    {item.evidenceInputs.join(", ") || "No direct evidence captured"}
-                  </p>
-                </section>
+                {item.evidenceInputs.length > 0 ? (
+                  <section style={{ marginTop: "12px" }}>
+                    <h3 style={{ marginBottom: "6px", fontSize: "0.95rem" }}>Evidence</h3>
+                    <p className="muted-text" style={{ margin: 0, fontSize: 13 }}>
+                      {item.evidenceInputs.join(", ")}
+                    </p>
+                  </section>
+                ) : null}
 
-                <p style={{ marginTop: "14px" }}>
-                  <Link href={`/student/careers/${item.career.slug}`}>Open career detail</Link>
+                <div className="button-row" style={{ marginTop: "16px" }}>
+                  <Link className="button-primary" href={`/student/proof-sessions/start/${item.career.slug}`}>
+                    Start proof session
+                  </Link>
+                  <Link className="button-secondary" href={`/student/recommendations/${item.career.slug}`}>
+                    Full match detail
+                  </Link>
+                </div>
+                <p style={{ marginTop: "10px", marginBottom: 0, fontSize: 13 }}>
+                  <Link href={`/student/careers/${item.career.slug}`}>Open career detail →</Link>
                 </p>
               </SurfaceCard>
             ))}

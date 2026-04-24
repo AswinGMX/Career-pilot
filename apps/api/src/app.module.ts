@@ -6,6 +6,7 @@ import { AssessmentsModule } from "./assessments/assessments.module";
 import { AuthModule } from "./auth/auth.module";
 import { CareersModule } from "./careers/careers.module";
 import { HealthModule } from "./health/health.module";
+import { McqModule } from "./mcq/mcq.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProfileModule } from "./profile/profile.module";
 import { PlatformModule } from "./platform/platform.module";
@@ -31,7 +32,8 @@ import { TenantsModule } from "./tenants/tenants.module";
     ProfileModule,
     CareersModule,
     RecommendationsModule,
-    ReportsModule
+    ReportsModule,
+    McqModule
   ]
 })
 export class AppModule implements NestModule {

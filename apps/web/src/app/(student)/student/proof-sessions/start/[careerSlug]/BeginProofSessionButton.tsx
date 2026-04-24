@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { startProofSession } from "@/lib/api";
 
-export function StartProofSessionButton({ careerSlug }: { careerSlug: string }): JSX.Element {
+export function BeginProofSessionButton({ careerSlug }: { careerSlug: string }): JSX.Element {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,9 +27,13 @@ export function StartProofSessionButton({ careerSlug }: { careerSlug: string }):
   return (
     <div className="form-stack">
       <button type="button" onClick={handleStart} disabled={pending} className="button-primary">
-        {pending ? "Preparing proof session..." : "Start AI proof session"}
+        {pending ? "Preparing proof session…" : "Begin session"}
       </button>
-      {error ? <p className="status-text--error" style={{ margin: 0 }}>{error}</p> : null}
+      {error ? (
+        <p className="status-text--error" style={{ margin: 0 }}>
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

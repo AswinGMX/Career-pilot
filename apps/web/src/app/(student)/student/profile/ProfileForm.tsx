@@ -7,6 +7,18 @@ import type { ProfileAssessmentResult, ProfileUpdatePayload, ProofQuestionSet, S
 
 import { generateAssessmentQuestions, submitProfileAssessment, submitStudentProfile, updateStudentProfile } from "@/lib/api";
 
+const GRADE_LEVEL_OPTIONS = [
+  "Class 8",
+  "Class 9",
+  "Class 10",
+  "Class 11",
+  "Class 12",
+  "Undergraduate",
+  "Graduate"
+];
+
+const AGE_BAND_OPTIONS = ["13-14", "14-15", "15-16", "16-17", "17-18", "18+"];
+
 function listToText(values: string[]): string {
   return values.join(", ");
 }
@@ -105,7 +117,19 @@ function CharacterProfileView({
   );
 }
 
-export function ProfileForm({ initialProfile, studentName, initialAssessmentResult }: { initialProfile: StudentProfile | null; studentName: string; initialAssessmentResult: ProfileAssessmentResult | null }): JSX.Element {
+export function ProfileForm({
+  initialProfile,
+  studentName,
+  initialAssessmentResult,
+  isEditingControlled,
+  onEditingChange
+}: {
+  initialProfile: StudentProfile | null;
+  studentName: string;
+  initialAssessmentResult: ProfileAssessmentResult | null;
+  isEditingControlled?: boolean;
+  onEditingChange?: (editing: boolean) => void;
+}): JSX.Element {
   const router = useRouter();
   const [gradeLevel, setGradeLevel] = useState(initialProfile?.gradeLevel || "");
   const [ageBand, setAgeBand] = useState(initialProfile?.ageBand || "");
@@ -123,7 +147,17 @@ export function ProfileForm({ initialProfile, studentName, initialAssessmentResu
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [isScoring, setIsScoring] = useState(false);
   const [assessmentResult, setAssessmentResult] = useState<ProfileAssessmentResult | null>(initialAssessmentResult);
-  const [isEditing, setIsEditing] = useState(!initialAssessmentResult && (!initialProfile || initialProfile.completionStatus !== "submitted"));
+  const [internalIsEditing, setInternalIsEditing] = useState(
+    !initialAssessmentResult && (!initialProfile || initialProfile.completionStatus !== "submitted")
+  );
+  const isControlled = typeof isEditingControlled === "boolean";
+  const isEditing = isControlled ? isEditingControlled : internalIsEditing;
+  const setIsEditing = (next: boolean): void => {
+    if (!isControlled) {
+      setInternalIsEditing(next);
+    }
+    onEditingChange?.(next);
+  };
 
   const payload: ProfileUpdatePayload = {
     gradeLevel,
@@ -139,15 +173,17 @@ export function ProfileForm({ initialProfile, studentName, initialAssessmentResu
   if (assessmentResult && !isEditing) {
     return (
       <div>
-        <div className="button-row" style={{ marginBottom: 16 }}>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => setIsEditing(true)}
-          >
-            Edit profile
-          </button>
-        </div>
+        {isControlled ? null : (
+          <div className="button-row" style={{ marginBottom: 16 }}>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => setIsEditing(true)}
+            >
+              Edit profile
+            </button>
+          </div>
+        )}
         <CharacterProfileView
           result={assessmentResult}
           onEdit={() => setIsEditing(true)}
@@ -164,29 +200,77 @@ export function ProfileForm({ initialProfile, studentName, initialAssessmentResu
           onEdit={() => {}}
         />
       ) : null}
-      <div className="field-grid">
+      <div className="profile-field-row profile-field-row--lead">
+        <label className="field-label">
+          <span>Age band</span>
+          <select
+            value={ageBand}
+            onChange={(event) => setAgeBand(event.target.value)}
+            className="field-control"
+          >
+            <option value="">Select age band</option>
+            {ageBand && !AGE_BAND_OPTIONS.includes(ageBand) ? (
+              <option value={ageBand}>{ageBand}</option>
+            ) : null}
+            {AGE_BAND_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </label>
         <label className="field-label">
           <span>Grade level</span>
-          <input
+          <select
             value={gradeLevel}
             onChange={(event) => setGradeLevel(event.target.value)}
             className="field-control"
-          />
+          >
+            <option value="">Select grade level</option>
+            {gradeLevel && !GRADE_LEVEL_OPTIONS.includes(gradeLevel) ? (
+              <option value={gradeLevel}>{gradeLevel}</option>
+            ) : null}
+            {GRADE_LEVEL_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
         </label>
         <label className="field-label">
-          <span>Age band</span>
+          <span>Favorite subjects</span>
           <input
-            value={ageBand}
-            onChange={(event) => setAgeBand(event.target.value)}
+            value={favoriteSubjects}
+            onChange={(event) => setFavoriteSubjects(event.target.value)}
+            placeholder="e.g. Math, Physics, Computer Science"
             className="field-control"
           />
         </label>
       </div>
-      <Field label="Favorite subjects" value={favoriteSubjects} onChange={setFavoriteSubjects} />
-      <Field label="Favorite activities" value={favoriteActivities} onChange={setFavoriteActivities} />
-      <Field label="Topics curious about" value={topicsCuriousAbout} onChange={setTopicsCuriousAbout} />
-      <Field label="Personal strengths" value={personalStrengths} onChange={setPersonalStrengths} />
-      <Field label="Avoids or dislikes" value={avoidsOrDislikes} onChange={setAvoidsOrDislikes} />
+      <div className="profile-field-row profile-field-row--pair">
+        <Field
+          label="Favorite activities"
+          value={favoriteActivities}
+          onChange={setFavoriteActivities}
+          placeholder="e.g. Chess, coding, debate club"
+        />
+        <Field
+          label="Topics curious about"
+          value={topicsCuriousAbout}
+          onChange={setTopicsCuriousAbout}
+          placeholder="e.g. Artificial intelligence, space exploration, psychology"
+        />
+      </div>
+      <div className="profile-field-row profile-field-row--pair">
+        <Field
+          label="Personal strengths"
+          value={personalStrengths}
+          onChange={setPersonalStrengths}
+          placeholder="e.g. Fast learner, analytical thinking, teamwork"
+        />
+        <Field
+          label="Avoids or dislikes"
+          value={avoidsOrDislikes}
+          onChange={setAvoidsOrDislikes}
+          placeholder="e.g. Public speaking, rote memorization"
+        />
+      </div>
       {initialProfile ? (
         <div className="status-chip">
           <strong>Status:</strong> {initialProfile.completionStatus} | <strong>Versions:</strong> {initialProfile.versionCount}

@@ -477,3 +477,49 @@ export interface SubmitProfileAssessmentPayload {
 export interface SubmitProfileAssessmentResponse {
   result: ProfileAssessmentResult;
 }
+
+export type McqSource = "gemini" | "cache" | "fallback";
+
+export interface McqOptionPayload {
+  letter: string;
+  orderIndex: number;
+  text: string;
+  isCorrect: boolean;
+}
+
+export interface McqItemPayload {
+  id: string;
+  orderIndex: number;
+  tag: string;
+  difficulty: number;
+  stem: string;
+  explanation: string;
+  correctLetter: string;
+  options: McqOptionPayload[];
+}
+
+export interface McqSetMeta {
+  id: string;
+  source: McqSource;
+  subject: string;
+  grade: number;
+  level: number;
+  count: number;
+  audience: string;
+  weakTopics: string;
+  createdAt: string;
+}
+
+export interface McqSetResponse {
+  set: McqSetMeta;
+  items: McqItemPayload[];
+}
+
+export interface McqGeneratePayload {
+  subject: string;
+  count?: number;
+}
+
+export interface McqSetsListResponse {
+  sets: McqSetMeta[];
+}

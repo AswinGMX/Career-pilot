@@ -4,6 +4,7 @@ import { SidebarUserCard } from "./sidebar-account";
 
 const studentNav = [
   { href: "/student/dashboard", label: "Overview" },
+  { href: "/student/journey", label: "Journey" },
   { href: "/student/profile", label: "Profile Studio" },
   { href: "/student/careers", label: "Careers" },
   { href: "/student/recommendations", label: "Recommendations" },

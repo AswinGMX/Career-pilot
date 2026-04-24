@@ -2,14 +2,14 @@ import Link from "next/link";
 
 import { getSchoolStudents } from "@/lib/api";
 import { AppPage, Hero, MetricCard, SurfaceCard } from "@/components/page-chrome";
-import { requireSchoolAdmin } from "@/lib/session";
+import { getServerSessionCookieHeader, requireSchoolAdmin } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function SchoolDashboardPage(): Promise<JSX.Element> {
   const session = await requireSchoolAdmin();
   const tenantId = session.activeMembership?.tenant.id || "";
-  const roster = tenantId ? await getSchoolStudents(tenantId) : null;
+  const roster = tenantId ? await getSchoolStudents(tenantId, undefined, getServerSessionCookieHeader()) : null;
   const students = roster?.students || [];
   const recommendationsReady = students.filter((student) => student.recommendationStatus === "ready").length;
   const proofCompleted = students.reduce((sum, student) => sum + student.completedProofSessions, 0);

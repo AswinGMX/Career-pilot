@@ -1,76 +1,147 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCareerBySlug } from "@/lib/api";
-import { requireStudent } from "@/lib/session";
-
-import { StartProofSessionButton } from "../../proof-sessions/StartProofSessionButton";
+import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
+import { getCareerBySlug, getLatestRecommendations } from "@/lib/api";
+import { getServerSessionCookieHeader, requireStudent } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function CareerDetailPage({ params }: { params: { slug: string } }): Promise<JSX.Element> {
   await requireStudent();
-  const response = await getCareerBySlug(params.slug);
+  const cookieHeader = getServerSessionCookieHeader();
 
-  if (!response) {
+  const [careerResponse, recsResponse] = await Promise.all([
+    getCareerBySlug(params.slug),
+    getLatestRecommendations(cookieHeader)
+  ]);
+
+  if (!careerResponse) {
     notFound();
   }
 
-  const career = response.career;
+  const career = careerResponse.career;
+  const match = recsResponse.snapshot?.items.find((item) => item.career.slug === career.slug);
 
   return (
-    <main style={{ maxWidth: "960px", margin: "0 auto", padding: "48px 24px" }}>
-      <p style={{ textTransform: "uppercase", letterSpacing: "0.08em", color: "#4b6480", fontSize: "12px" }}>
-        {career.category.name}
-      </p>
-      <h1 style={{ marginTop: "8px", fontSize: "36px" }}>{career.title}</h1>
-      <p style={{ color: "#334a62", lineHeight: 1.6 }}>{career.summary}</p>
-      <p style={{ marginTop: "12px" }}>
-        <Link href="/student/careers">Back to catalog</Link>
-      </p>
-      <div style={{ marginTop: "16px" }}>
-        <StartProofSessionButton careerSlug={career.slug} />
-      </div>
+    <AppPage>
+      <Hero
+        eyebrow={career.category.name}
+        title={career.title}
+        subtitle={<p style={{ margin: 0 }}>{career.summary}</p>}
+      />
 
-      <section style={{ marginTop: "28px", display: "grid", gap: "20px" }}>
-        <Panel title="Education path" items={career.educationPath} />
-        <Panel title="Skills" items={career.skills} />
-        <Panel title="Positives" items={career.positives} />
-        <Panel title="Challenges" items={career.challenges} />
-        <Panel title="Drawbacks" items={career.drawbacks} />
-        <pre
-          style={{
-            padding: "16px",
-            borderRadius: "12px",
-            background: "#fff",
-            border: "1px solid #d8e1eb",
-            overflowX: "auto"
-          }}
-        >
-          {JSON.stringify(
-            {
-              salaryMeta: career.salaryMeta,
-              outlookMeta: career.outlookMeta,
-              resilienceMeta: career.resilienceMeta
-            },
-            null,
-            2
-          )}
-        </pre>
-      </section>
-    </main>
+      <div className="section-stack">
+        <SurfaceCard>
+          <div className="match-badge-row">
+            {match ? (
+              <span className={`fit-badge fit-badge--${match.fitLabel}`}>
+                Match #{match.rank} · {match.fitLabel} fit · {match.fitScore}
+              </span>
+            ) : null}
+            <span className="status-chip">{career.category.name}</span>
+          </div>
+          <div className="button-row" style={{ marginTop: match ? "14px" : 0 }}>
+            <Link className="button-primary" href={`/student/proof-sessions/start/${career.slug}`}>
+              Start proof session
+            </Link>
+            {match ? (
+              <Link className="button-secondary" href={`/student/recommendations/${career.slug}`}>
+                View full match reasoning
+              </Link>
+            ) : null}
+            <Link className="button-ghost" href="/student/careers">
+              Back to catalog
+            </Link>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard title="Education path">
+          <ul className="content-list">
+            {career.educationPath.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </SurfaceCard>
+
+        <SurfaceCard title="Skills">
+          <ul className="content-list">
+            {career.skills.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </SurfaceCard>
+
+        <div className="panel-grid panel-grid--cards">
+          <SurfaceCard title="Positives">
+            <ul className="content-list">
+              {career.positives.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </SurfaceCard>
+          <SurfaceCard title="Challenges">
+            <ul className="content-list">
+              {career.challenges.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </SurfaceCard>
+          <SurfaceCard title="Drawbacks">
+            <ul className="content-list">
+              {career.drawbacks.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </SurfaceCard>
+        </div>
+
+        <SurfaceCard title="Market signals">
+          <div className="panel-grid panel-grid--metrics">
+            <CareerMetaCard label="Salary" value={formatSalary(career.salaryMeta)} />
+            <CareerMetaCard label="Demand" value={formatOutlook(career.outlookMeta)} />
+            <CareerMetaCard label="Resilience" value={formatResilience(career.resilienceMeta)} />
+          </div>
+        </SurfaceCard>
+      </div>
+    </AppPage>
   );
 }
 
-function Panel({ title, items }: { title: string; items: string[] }): JSX.Element {
+function CareerMetaCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <section style={{ background: "#fff", border: "1px solid #d8e1eb", borderRadius: "14px", padding: "18px" }}>
-      <h2 style={{ marginTop: 0 }}>{title}</h2>
-      <ul style={{ margin: 0, paddingLeft: "20px", color: "#334a62", lineHeight: 1.8 }}>
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-    </section>
+    <article className="metric-card">
+      <p className="metric-label">{label}</p>
+      <p className="metric-value" style={{ fontSize: "1.1rem", lineHeight: 1.35 }}>
+        {value}
+      </p>
+    </article>
   );
+}
+
+function formatSalary(meta: Record<string, unknown>): string {
+  const entry = meta.entryLevelLpa;
+  const mid = meta.midLevelLpa;
+  const senior = meta.seniorLevelLpa;
+  if (typeof entry === "number" && typeof mid === "number" && typeof senior === "number") {
+    return `${entry} → ${mid} → ${senior} LPA`;
+  }
+  return "Not available";
+}
+
+function formatOutlook(meta: Record<string, unknown>): string {
+  const demand = meta.demandScore;
+  if (typeof demand === "number") {
+    return `${demand}/100`;
+  }
+  return "Not available";
+}
+
+function formatResilience(meta: Record<string, unknown>): string {
+  const score = meta.score;
+  const label = meta.label;
+  if (typeof score === "number" && typeof label === "string") {
+    return `${score}/100 · ${label}`;
+  }
+  return "Not available";
 }

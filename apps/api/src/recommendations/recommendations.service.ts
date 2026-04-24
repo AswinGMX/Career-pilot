@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
+  Logger,
   UnauthorizedException
 } from "@nestjs/common";
 import {
@@ -20,7 +22,7 @@ import type {
 } from "@career-pilot/types";
 
 import { AuthService } from "../auth/auth.service";
-import { GeminiService } from "../ai/gemini.service";
+import { LlmService } from "../ai/llm.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 const fallbackRecommendationEngineVersion = "rules-v1";
@@ -58,10 +60,12 @@ type CareerWithRequiredDetail = CareerRecordWithDetail & {
 
 @Injectable()
 export class RecommendationsService {
+  private readonly logger = new Logger(RecommendationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
-    private readonly geminiService: GeminiService
+    private readonly llmService: LlmService
   ) {}
 
   async getLatest(token: string | undefined): Promise<RecommendationLatestResponse> {
@@ -81,6 +85,26 @@ export class RecommendationsService {
   }
 
   async recompute(token: string | undefined): Promise<RecommendationRecomputeResponse> {
+    try {
+      return await this.recomputeInternal(token);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `recompute failed: ${(error as Error)?.message || "unknown"}`,
+        (error as Error)?.stack
+      );
+
+      throw new HttpException(
+        `Recommendation recompute failed: ${(error as Error)?.message || "unknown error"}`,
+        500
+      );
+    }
+  }
+
+  private async recomputeInternal(token: string | undefined): Promise<RecommendationRecomputeResponse> {
     const session = await this.requireStudentSession(token);
     const profile = await this.prisma.studentProfile.findUnique({
       where: {
@@ -335,7 +359,7 @@ export class RecommendationsService {
     profile: ProfileRecord,
     baseItems: RecommendationItem[]
   ): Promise<{ items: RecommendationItem[]; engineVersion: string }> {
-    if (!this.geminiService.isConfigured()) {
+    if (!this.llmService.isConfigured()) {
       return {
         items: baseItems.slice(0, 5),
         engineVersion: fallbackRecommendationEngineVersion
@@ -381,7 +405,7 @@ export class RecommendationsService {
       avoidsOrDislikes: this.fromJsonArray(profile.avoidsOrDislikes)
     };
 
-    const response = await this.geminiService.generateStructuredJson<{
+    const response = await this.llmService.generateStructuredJson<{
       items: Array<{
         careerSlug: string;
         fitScore: number;

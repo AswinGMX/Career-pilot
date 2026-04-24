@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { getSchoolStudents } from "@/lib/api";
 import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
-import { requireSchoolAdmin } from "@/lib/session";
+import { getServerSessionCookieHeader, requireSchoolAdmin } from "@/lib/session";
 
 import { CreateStudentForm } from "./CreateStudentForm";
 
@@ -29,7 +29,8 @@ export default async function SchoolStudentsPage({
       q,
       page: Number.isFinite(page) && page > 0 ? page : 1,
       pageSize: 10
-    }
+    },
+    getServerSessionCookieHeader()
   );
 
   if (!response) {

@@ -27,7 +27,7 @@ import type {
   SubmitProfileAssessmentResponse
 } from "@career-pilot/types";
 
-import { GeminiService } from "../ai/gemini.service";
+import { LlmService } from "../ai/llm.service";
 import { AuthService } from "../auth/auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -76,7 +76,7 @@ export class AssessmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
-    private readonly geminiService: GeminiService
+    private readonly llmService: LlmService
   ) {}
 
   async startProofSession(token: string | undefined, careerSlug: string): Promise<ProofSessionResponse> {
@@ -399,7 +399,7 @@ export class AssessmentsService {
       return `${q?.dimension}: "${q?.options[a.optionIndex]}"`;
     }).join("; ");
 
-    const aiResult = await this.geminiService.generateStructuredJson<{
+    const aiResult = await this.llmService.generateStructuredJson<{
       narrative: string;
       detailedReadout: string[];
       dimensions: Array<{ dimension: string; description: string }>;
@@ -414,7 +414,7 @@ Return JSON: {"narrative":"2-3 sentences about ${session.user.fullName} mentioni
       schema: {},
       temperature: 0.7
     }).catch((err) => {
-      console.error("Gemini scoring call failed:", err?.message || err);
+      console.error("LLM scoring call failed:", err?.message || err);
       return null;
     });
 
@@ -464,7 +464,7 @@ Return JSON: {"narrative":"2-3 sentences about ${session.user.fullName} mentioni
   private async generateProfileBasedQuestions(profile: ProfileRecord): Promise<ProofQuestionSet> {
     const fallback = this.buildFallbackProfileQuestionSet();
 
-    console.log("Gemini isConfigured:", this.geminiService.isConfigured());
+    console.log("LLM isConfigured:", this.llmService.isConfigured());
 
     const subjects = this.fromJsonArray(profile.favoriteSubjects).join(", ");
     const activities = this.fromJsonArray(profile.favoriteActivities).join(", ");
@@ -472,7 +472,7 @@ Return JSON: {"narrative":"2-3 sentences about ${session.user.fullName} mentioni
     const dislikes = this.fromJsonArray(profile.avoidsOrDislikes).join(", ");
     const curious = this.fromJsonArray(profile.topicsCuriousAbout).join(", ");
 
-    const aiResponse = await this.geminiService.generateStructuredJson<ProofQuestionSet>({
+    const aiResponse = await this.llmService.generateStructuredJson<ProofQuestionSet>({
       systemInstruction: "You generate behavioral assessment questions for students. Return only valid JSON.",
       prompt: `Generate ${proofQuestionCount} behavioral questions for a grade ${profile.gradeLevel || "unknown"} student (age ${profile.ageBand || "unknown"}).
 Profile: likes ${subjects || "various subjects"}, enjoys ${activities || "various activities"}, curious about ${curious || "many things"}, strengths: ${strengths || "developing"}, avoids: ${dislikes || "nothing specific"}.
@@ -483,7 +483,7 @@ Exactly ${proofQuestionCount} questions.`,
       schema: {},
       temperature: 0.8
     }).catch((err) => {
-      console.error("Gemini question generation failed:", err?.message || err);
+      console.error("LLM question generation failed:", err?.message || err);
       return null;
     });
 
@@ -644,7 +644,7 @@ Exactly ${proofQuestionCount} questions.`,
 
   private async generateProofQuestionSet(career: CareerRecord, profile: ProfileRecord): Promise<ProofQuestionSet> {
     const fallback = this.buildFallbackProofQuestionSet(career);
-    const aiResponse = await this.geminiService.generateStructuredJson<ProofQuestionSet>({
+    const aiResponse = await this.llmService.generateStructuredJson<ProofQuestionSet>({
       systemInstruction:
         "You generate safe, realistic career-readiness interview questions for students. Focus on behavior, independence, discipline, resilience, ethics, pressure tolerance, service mindset, communication, empathy, adaptability, and stamina where relevant. Never ask trivia or technical questions. Return only JSON.",
       prompt: [
@@ -719,7 +719,7 @@ Exactly ${proofQuestionCount} questions.`,
     answers: ProofAnswerInput[]
   ): Promise<ProofResult> {
     const fallback = this.buildFallbackProofResult(questionSet, answers, career);
-    const aiResponse = await this.geminiService.generateStructuredJson<{
+    const aiResponse = await this.llmService.generateStructuredJson<{
       source: string;
       narrative: string;
       parentSummary: string;

@@ -36,8 +36,8 @@ export class GeminiService {
       return null;
     }
 
-    const maxRetries = 4;
-    const retryDelays = [5000, 15000, 30000, 45000];
+    const maxRetries = 3;
+    const retryDelays = [1500, 4000];
     const hasSchema = schema && Object.keys(schema).length > 0;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
