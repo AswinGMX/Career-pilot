@@ -26,6 +26,10 @@ export function getDefaultAppPath(session: AuthSessionPayload | null): string {
     return "/school/dashboard";
   }
 
+  if (session.mentor) {
+    return "/mentor/dashboard";
+  }
+
   if (session.activeMembership?.role === "student") {
     return "/student/dashboard";
   }
@@ -71,6 +75,20 @@ export async function requireStudent(): Promise<AuthSessionPayload> {
 
   if (session.activeMembership?.role === "school_admin") {
     redirect("/school/dashboard");
+  }
+
+  if (session.mentor) {
+    redirect("/mentor/dashboard");
+  }
+
+  return session;
+}
+
+export async function requireMentor(): Promise<AuthSessionPayload> {
+  const session = await requireSession();
+
+  if (!session.mentor) {
+    redirect(getDefaultAppPath(session));
   }
 
   return session;

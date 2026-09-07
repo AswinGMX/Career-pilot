@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { AppPage, Hero, MetricCard, SurfaceCard } from "@/components/page-chrome";
+import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
+import { BarList, RadialGauge, StatTile } from "@/components/charts";
 import { JourneyStepper } from "@/components/journey-stepper";
 import { getLatestRecommendations, getLatestStudentReport, getProofSessions, getStudentProfile } from "@/lib/api";
 import { getServerSessionCookieHeader, requireStudent } from "@/lib/session";
@@ -82,12 +83,70 @@ export default async function StudentDashboardPage(): Promise<JSX.Element> {
 
         {isSubmitted && (
           <div className="panel-grid panel-grid--metrics">
-            <MetricCard label="Readiness band" value={assessment?.readinessBand ?? "Pending"} />
-            <MetricCard
-              label="Top career match"
-              value={topMatch ? truncate(topMatch.career.title, 28) : "—"}
+            <StatTile
+              label="Readiness score"
+              value={assessment ? assessment.overallScore : "—"}
+              unit={assessment ? "/100" : undefined}
+              icon="gauge"
+              caption={assessment?.readinessBand ?? "Pending assessment"}
+              meter={assessment ? { value: assessment.overallScore, max: 100 } : undefined}
             />
-            <MetricCard label="Proof sessions" value={String(completedProofs.length)} />
+            <StatTile
+              label="Top match fit"
+              value={topMatch ? topMatch.fitScore : "—"}
+              unit={topMatch ? "/100" : undefined}
+              icon="target"
+              caption={topMatch ? `${truncate(topMatch.career.title, 24)} · ${topMatch.fitLabel} fit` : "No matches yet"}
+              meter={topMatch ? { value: topMatch.fitScore, max: 100 } : undefined}
+              tone="neutral"
+            />
+            <StatTile
+              label="Proof sessions"
+              value={completedProofs.length}
+              icon="check"
+              caption={completedProofs.length === 1 ? "session completed" : "sessions completed"}
+              tone="success"
+            />
+          </div>
+        )}
+
+        {assessment && (
+          <div className="viz-bento">
+            <div className="viz-col-5">
+              <SurfaceCard className="viz-gauge-card">
+                <p className="viz-card-title" style={{ textAlign: "center" }}>
+                  Readiness overview
+                </p>
+                <RadialGauge
+                  value={assessment.overallScore}
+                  max={100}
+                  unit="/100"
+                  caption="Overall"
+                  label={assessment.readinessBand}
+                />
+              </SurfaceCard>
+            </div>
+            <div className="viz-col-7">
+              <SurfaceCard>
+                <p className="viz-card-title">Readiness by dimension</p>
+                <p className="viz-card-sub">Where the assessment sees strength — and where to grow.</p>
+                {assessment.dimensions.length > 0 ? (
+                  <BarList
+                    ariaLabel="Readiness score by dimension"
+                    max={100}
+                    items={assessment.dimensions.map((dimension) => ({
+                      label: dimension.dimension,
+                      value: dimension.score,
+                      valueLabel: String(dimension.score)
+                    }))}
+                  />
+                ) : (
+                  <p className="muted-text" style={{ margin: 0 }}>
+                    Dimension scores will appear here once your assessment is scored.
+                  </p>
+                )}
+              </SurfaceCard>
+            </div>
           </div>
         )}
 
@@ -101,7 +160,8 @@ export default async function StudentDashboardPage(): Promise<JSX.Element> {
             </div>
             <div className="panel-grid panel-grid--cards">
               {snapshot.items.slice(0, 3).map((item) => (
-                <SurfaceCard key={item.career.id}>
+                <article className="viz-match" key={item.career.id}>
+                  <span className="viz-match__rail" aria-hidden="true" />
                   <div className="rec-card-header">
                     <span className={`fit-badge fit-badge--${item.fitLabel}`}>
                       {item.fitLabel} fit · {item.fitScore}
@@ -114,6 +174,13 @@ export default async function StudentDashboardPage(): Promise<JSX.Element> {
                   <p className="muted-text" style={{ fontSize: 13, margin: 0 }}>
                     {item.career.category.name}
                   </p>
+                  <div
+                    className="chart-bars__track"
+                    style={{ marginTop: 12 }}
+                    title={`Fit score ${item.fitScore} of 100`}
+                  >
+                    <div className="chart-bars__fill" style={{ width: `${item.fitScore}%` }} />
+                  </div>
                   <p className="muted-text" style={{ margin: "10px 0 0", lineHeight: 1.6 }}>
                     {item.explanation}
                   </p>
@@ -127,7 +194,7 @@ export default async function StudentDashboardPage(): Promise<JSX.Element> {
                   <p style={{ marginTop: 14, marginBottom: 0, fontSize: 14 }}>
                     <Link href={`/student/careers/${item.career.slug}`}>Explore career →</Link>
                   </p>
-                </SurfaceCard>
+                </article>
               ))}
             </div>
           </>

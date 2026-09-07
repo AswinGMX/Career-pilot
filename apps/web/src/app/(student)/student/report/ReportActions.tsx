@@ -3,7 +3,12 @@
 import { startTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { createStudentReportShare, generateStudentReport, revokeStudentReportShare } from "@/lib/api";
+import {
+  createStudentReportShare,
+  generateStudentReport,
+  getLatestStudentReport,
+  revokeStudentReportShare
+} from "@/lib/api";
 
 export function GenerateStudentReportButton(): JSX.Element {
   const router = useRouter();
@@ -15,7 +20,26 @@ export function GenerateStudentReportButton(): JSX.Element {
     setError(null);
 
     try {
-      await generateStudentReport();
+      // Generation is asynchronous: the API queues the job and a worker prepares
+      // the report. Poll the latest report until it is ready (or failed).
+      const queued = await generateStudentReport();
+      const reportId = queued.report?.id;
+      let status = queued.report?.status;
+      const deadline = Date.now() + 60_000;
+
+      while (status !== "ready" && status !== "failed" && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const latest = await getLatestStudentReport();
+        if (latest.report && (!reportId || latest.report.id === reportId)) {
+          status = latest.report.status;
+        }
+      }
+
+      if (status === "failed") {
+        setError("Report generation failed. Please try again.");
+        return;
+      }
+
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to generate report.");
@@ -34,7 +58,7 @@ export function GenerateStudentReportButton(): JSX.Element {
           border: 0,
           borderRadius: "999px",
           padding: "12px 18px",
-          background: "#12344d",
+          background: "linear-gradient(135deg, #6d5efc, #9b6bf8)",
           color: "#fff",
           cursor: pending ? "wait" : "pointer"
         }}
@@ -74,11 +98,11 @@ export function CreateParentShareButton(): JSX.Element {
         onClick={handleCreate}
         disabled={pending}
         style={{
-          border: "1px solid #12344d",
+          border: "1px solid #5340d6",
           borderRadius: "999px",
           padding: "12px 18px",
           background: "#fff",
-          color: "#12344d",
+          color: "#5340d6",
           cursor: pending ? "wait" : "pointer"
         }}
       >

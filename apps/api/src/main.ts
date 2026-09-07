@@ -6,6 +6,7 @@ import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module";
 import { getAllowedOrigins } from "./platform/origins";
+import { resolveTrustProxy } from "./platform/trust-proxy";
 
 async function bootstrap(): Promise<void> {
   const allowedOrigins = new Set(getAllowedOrigins());
@@ -28,6 +29,12 @@ async function bootstrap(): Promise<void> {
     expressApp.disable("x-powered-by");
   }
 
+  // Must be set before any middleware reads `request.ip`: it is what makes the
+  // rate limiter and audit log trust (or ignore) `x-forwarded-for`.
+  if (expressApp && typeof expressApp.set === "function") {
+    expressApp.set("trust proxy", resolveTrustProxy(process.env.TRUST_PROXY));
+  }
+
   app.setGlobalPrefix("v1");
   app.use(cookieParser());
   app.useGlobalPipes(
@@ -37,6 +44,10 @@ async function bootstrap(): Promise<void> {
       forbidNonWhitelisted: true
     })
   );
+
+  // Without this, `onModuleDestroy` never runs on SIGTERM, so a redeploy drops
+  // in-flight work and leaves Redis/Prisma sockets to be killed with the process.
+  app.enableShutdownHooks();
 
   const port = Number(process.env.API_PORT || 4000);
   const host = process.env.API_HOST || "127.0.0.1";

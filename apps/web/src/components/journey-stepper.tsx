@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Fragment } from "react";
 
+import { JourneyDialog } from "./journey-report-info";
+
 type StepState = "done" | "active" | "pending";
 
 export interface JourneyStepperProps {
@@ -15,6 +17,7 @@ interface Step {
   label: string;
   state: StepState;
   status: string;
+  description: string;
 }
 
 function deriveSteps({ profileStatus, recsCount, proofsCompleted, reportReady }: JourneyStepperProps): Step[] {
@@ -35,12 +38,15 @@ function deriveSteps({ profileStatus, recsCount, proofsCompleted, reportReady }:
           ? "Submitted"
           : profileStatus === "draft"
           ? "Draft — continue"
-          : "Not started"
+          : "Not started",
+      description:
+        "The signals everything else is built on — favourite subjects, activities, curiosity topics, and strengths."
     },
     {
       href: "/student/recommendations",
       label: "Recommendations",
-      status: recsCount > 0 ? `${recsCount} match${recsCount === 1 ? "" : "es"}` : "Generate matches"
+      status: recsCount > 0 ? `${recsCount} match${recsCount === 1 ? "" : "es"}` : "Generate matches",
+      description: "AI-ranked career matches with fit scores, derived directly from your profile."
     },
     {
       href: "/student/proof-sessions",
@@ -50,12 +56,14 @@ function deriveSteps({ profileStatus, recsCount, proofsCompleted, reportReady }:
           ? `${proofsCompleted} completed`
           : recsDone
           ? "Start a session"
-          : "Waiting on matches"
+          : "Waiting on matches",
+      description: "Short scenario-based sessions that turn interest into proven, real-world readiness."
     },
     {
       href: "/student/report",
       label: "Report",
-      status: reportReady ? "Ready to share" : proofsDone ? "Generate report" : "Waiting on proof"
+      status: reportReady ? "Ready to share" : proofsDone ? "Generate report" : "Waiting on proof",
+      description: "A durable, shareable summary of your profile, matches, and proof evidence."
     }
   ];
 
@@ -71,6 +79,15 @@ export function JourneyStepper(props: JourneyStepperProps): JSX.Element {
 
   return (
     <nav className="journey-stepper" aria-label="Career discovery journey">
+      <JourneyDialog
+        steps={steps.map((step) => ({
+          label: step.label,
+          status: step.status,
+          state: step.state,
+          href: step.href,
+          description: step.description
+        }))}
+      />
       {steps.map((step, index) => (
         <Fragment key={step.href}>
           <Link className={`journey-step journey-step--${step.state}`} href={step.href}>

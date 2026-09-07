@@ -17,6 +17,7 @@ type SessionRecord = Prisma.SessionGetPayload<{
             tenant: true;
           };
         };
+        mentorProfile: true;
       };
     };
   };

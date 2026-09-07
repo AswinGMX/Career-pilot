@@ -89,20 +89,23 @@ async function main() {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || `http://127.0.0.1:${apiPort}/v1`
   };
 
+  // Worker runs by default so queued jobs (evaluations, reports, transcoding)
+  // actually get processed locally. Opt out with START_WORKER=0 if you want to
+  // exercise the API's read-path self-heal in isolation.
+  const startWorker = process.env.START_WORKER !== "0";
+
   console.log(`Starting Career Pilot local workspace`);
   console.log(`Web: http://localhost:${webPort}`);
   console.log(`API: http://localhost:${apiPort}/v1`);
   console.log(`Metrics: http://localhost:${apiPort}/v1/metrics`);
-  if (process.env.START_WORKER === "1") {
-    console.log(`Worker: enabled`);
-  }
+  console.log(`Worker: ${startWorker ? "enabled" : "disabled (START_WORKER=0)"}`);
 
   const children = [
     spawn("pnpm", ["--filter", "@career-pilot/api", "dev"], { stdio: "inherit", env: apiEnv }),
     spawn("pnpm", ["--filter", "@career-pilot/web", "dev"], { stdio: "inherit", env: webEnv })
   ];
 
-  if (process.env.START_WORKER === "1") {
+  if (startWorker) {
     children.push(spawn("pnpm", ["--filter", "@career-pilot/worker", "dev"], { stdio: "inherit", env: sharedEnv }));
   }
 

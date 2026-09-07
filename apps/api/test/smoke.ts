@@ -4,11 +4,39 @@ import assert = require("node:assert/strict");
 import cookieParser = require("cookie-parser");
 import request = require("supertest");
 
+import type { Redis } from "ioredis";
+
 import { ValidationPipe } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 
 import { AppModule } from "../src/app.module";
 import { PrismaService } from "../src/prisma/prisma.service";
+import { REDIS_CONNECTION } from "../src/queue/queue.constants";
+import { WorkerModule } from "../src/worker/worker.module";
+import { WorkerRunner } from "../src/worker/worker.runner";
+
+/** Polls a "latest report" endpoint until the worker marks it ready. */
+async function pollReportReady(
+  server: Parameters<typeof request>[0],
+  url: string,
+  cookie: string,
+  timeoutMs = 20_000
+): Promise<{ id: string; status: string; fileUrl: string | null; report: Record<string, unknown> }> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const response = await request(server).get(url).set("Cookie", cookie).expect(200);
+    const report = response.body.report;
+    if (report?.status === "ready") {
+      return report;
+    }
+    if (report?.status === "failed") {
+      throw new Error(`Report generation failed: ${report.errorMessage ?? "unknown"}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  throw new Error(`Report at ${url} did not become ready within ${timeoutMs}ms.`);
+}
 
 async function main(): Promise<void> {
   process.env.DATABASE_URL =
@@ -31,7 +59,20 @@ async function main(): Promise<void> {
 
   await app.init();
 
+  // Boot the background worker in-process so queued jobs (report generation)
+  // are actually processed during the smoke run — exercising the full async path.
+  const worker = await NestFactory.createApplicationContext(WorkerModule, { logger: false });
+  worker.get(WorkerRunner).start();
+
   const prisma = app.get(PrismaService);
+
+  // The rate limiter is Redis-backed and persists across process restarts;
+  // clear its counters so repeated smoke runs don't trip the auth limits.
+  const redis = app.get<Redis>(REDIS_CONNECTION);
+  const rateLimitKeys = await redis.keys("ratelimit:*");
+  if (rateLimitKeys.length > 0) {
+    await redis.del(...rateLimitKeys);
+  }
   const suffix = Date.now().toString();
   const studentEmail = `phase1-smoke-student-${suffix}@example.com`;
   const adminEmail = `phase1-smoke-admin-${suffix}@example.com`;
@@ -202,19 +243,22 @@ async function main(): Promise<void> {
     const generatedStudentReport = await request(app.getHttpServer())
       .post("/v1/reports/student/generate")
       .set("Cookie", studentCookie)
-      .expect(201);
+      .expect(202);
 
     assert.equal(generatedStudentReport.body.ok, true);
-    assert.equal(generatedStudentReport.body.report.status, "ready");
-    assert.ok(generatedStudentReport.body.report.fileUrl);
+    assert.ok(generatedStudentReport.body.report.id, "expected a queued report id");
 
-    const latestStudentReport = await request(app.getHttpServer())
-      .get("/v1/reports/student/latest")
-      .set("Cookie", studentCookie)
-      .expect(200);
+    // Async generation: poll until the worker marks the report ready.
+    const readyStudentReport = await pollReportReady(
+      app.getHttpServer(),
+      "/v1/reports/student/latest",
+      studentCookie
+    );
 
-    assert.equal(latestStudentReport.body.report.id, generatedStudentReport.body.report.id);
-    assert.ok(latestStudentReport.body.report.report.topRecommendationTitle);
+    assert.equal(readyStudentReport.id, generatedStudentReport.body.report.id);
+    assert.equal(readyStudentReport.status, "ready");
+    assert.ok(readyStudentReport.fileUrl, "expected a signed report fileUrl");
+    assert.ok((readyStudentReport.report as { topRecommendationTitle?: string }).topRecommendationTitle);
 
     const createdShare = await request(app.getHttpServer())
       .post("/v1/reports/student/latest/share")
@@ -383,18 +427,26 @@ async function main(): Promise<void> {
     const generatedSchoolReport = await request(app.getHttpServer())
       .post(`/v1/reports/schools/${tenantId}/generate`)
       .set("Cookie", adminCookie)
-      .expect(201);
+      .expect(202);
 
     assert.equal(generatedSchoolReport.body.ok, true);
-    assert.equal(generatedSchoolReport.body.report.status, "ready");
-    assert.ok(generatedSchoolReport.body.report.report.totals.students >= 2);
+    assert.ok(generatedSchoolReport.body.report.id, "expected a queued school report id");
+
+    const readySchoolReport = await pollReportReady(
+      app.getHttpServer(),
+      `/v1/reports/schools/${tenantId}/latest`,
+      adminCookie
+    );
+
+    assert.equal(readySchoolReport.id, generatedSchoolReport.body.report.id);
+    assert.equal(readySchoolReport.status, "ready");
+    assert.ok((readySchoolReport.report as { totals: { students: number } }).totals.students >= 2);
 
     const latestSchoolReport = await request(app.getHttpServer())
       .get(`/v1/reports/schools/${tenantId}/latest`)
       .set("Cookie", adminCookie)
       .expect(200);
 
-    assert.equal(latestSchoolReport.body.report.id, generatedSchoolReport.body.report.id);
     assert.equal(latestSchoolReport.body.tenant.slug, tenantSlug);
 
     const refreshed = await request(app.getHttpServer())
@@ -563,8 +615,17 @@ async function main(): Promise<void> {
       });
     }
 
+    await worker.close();
     await app.close();
   }
 }
 
-void main();
+main()
+  .then(() => {
+    console.log("[smoke] PASS — all flows green.");
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

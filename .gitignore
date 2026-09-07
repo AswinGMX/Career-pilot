@@ -21,6 +21,10 @@ vite.config.d.ts
 # Local app/runtime data
 .runtime/
 
+# Local object storage (dev driver)
+.storage/
+apps/api/.storage/
+
 # Generated report exports
 apps/api/.generated-reports/
 

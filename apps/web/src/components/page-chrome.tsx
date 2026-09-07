@@ -29,14 +29,16 @@ export function Hero({
 export function SurfaceCard({
   title,
   children,
-  strong = false
+  strong = false,
+  className
 }: {
   title?: string;
   children: ReactNode;
   strong?: boolean;
+  className?: string;
 }): JSX.Element {
   return (
-    <section className={`surface-card${strong ? " surface-card--strong" : ""}`}>
+    <section className={`surface-card${strong ? " surface-card--strong" : ""}${className ? ` ${className}` : ""}`}>
       {title ? <h2 style={{ marginTop: 0, marginBottom: 14 }}>{title}</h2> : null}
       {children}
     </section>

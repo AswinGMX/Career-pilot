@@ -8,6 +8,11 @@
     "apps/*",
     "packages/*"
   ],
+  "pnpm": {
+    "overrides": {
+      "ioredis": "5.10.1"
+    }
+  },
   "scripts": {
     "dev": "node scripts/dev-workspace.mjs",
     "dev:web": "pnpm --filter @career-pilot/web dev",

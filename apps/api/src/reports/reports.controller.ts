@@ -1,6 +1,6 @@
 import type { Request } from "express";
 
-import { Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from "@nestjs/common";
 
 import type {
   ParentSharedReportResponse,
@@ -22,12 +22,13 @@ import { ReportsService } from "./reports.service";
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {
     this.getLatestStudentReport = this.getLatestStudentReport.bind(this);
-    this.generateStudentReport = this.generateStudentReport.bind(this);
+    // generateStudentReport is intentionally NOT rebound: re-binding strips the
+    // @HttpCode(202) metadata Nest reads from the handler. Nest binds `this`.
     this.createStudentReportShare = this.createStudentReportShare.bind(this);
     this.revokeStudentReportShare = this.revokeStudentReportShare.bind(this);
     this.getParentSharedReport = this.getParentSharedReport.bind(this);
     this.getLatestSchoolReport = this.getLatestSchoolReport.bind(this);
-    this.generateSchoolReport = this.generateSchoolReport.bind(this);
+    // generateSchoolReport intentionally NOT rebound — see note above.
     this.getSchoolStudents = this.getSchoolStudents.bind(this);
     this.getSchoolStudentDetail = this.getSchoolStudentDetail.bind(this);
   }
@@ -39,6 +40,7 @@ export class ReportsController {
   }
 
   @Post("student/generate")
+  @HttpCode(202)
   generateStudentReport(@Req() request: Request): Promise<StudentGenerateReportResponse> {
     const token = request.cookies?.[SESSION_COOKIE_NAME];
     return this.reportsService.generateStudentReport(token);
@@ -77,6 +79,7 @@ export class ReportsController {
   }
 
   @Post("schools/:tenantId/generate")
+  @HttpCode(202)
   generateSchoolReport(
     @Req() request: Request,
     @Param("tenantId") tenantId: string

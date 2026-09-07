@@ -51,13 +51,13 @@ export class RequestContextMiddleware implements NestMiddleware {
     return typeof value === "string" && value.trim() ? value.trim() : randomUUID();
   }
 
+  /**
+   * Client IP as recorded on audit entries. Uses `request.ip` so the value
+   * honours the configured `trust proxy` setting instead of a client-supplied
+   * `x-forwarded-for`, which would let a caller write any address it likes into
+   * the audit trail.
+   */
   private readIpAddress(request: Request): string {
-    const forwardedFor = request.headers["x-forwarded-for"];
-
-    if (typeof forwardedFor === "string" && forwardedFor.trim()) {
-      return forwardedFor.split(",")[0].trim();
-    }
-
     return request.ip || request.socket.remoteAddress || "unknown";
   }
 

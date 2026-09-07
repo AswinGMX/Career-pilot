@@ -1,8 +1,8 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from "class-validator";
+import { ArrayMaxSize, IsArray, IsEmail, IsEnum, IsOptional, IsString, MinLength } from "class-validator";
 
 import type { RegisterAccountType } from "@career-pilot/types";
 
-const registerAccountTypes: RegisterAccountType[] = ["individual", "school_admin", "school_student"];
+const registerAccountTypes: RegisterAccountType[] = ["individual", "school_admin", "school_student", "mentor"];
 
 export class RegisterDto {
   @IsEnum(registerAccountTypes)
@@ -25,4 +25,14 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   tenantSlug?: string;
+
+  @IsOptional()
+  @IsString()
+  headline?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(12)
+  expertise?: string[];
 }

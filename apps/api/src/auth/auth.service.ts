@@ -16,6 +16,21 @@ import type {
 import { PrismaService } from "../prisma/prisma.service";
 
 export const SESSION_COOKIE_NAME = "career_pilot_session";
+
+/**
+ * Raised when an OAuth identity resolves to an email that already belongs to an
+ * account, but the provider does not assert that the identity owns that address.
+ *
+ * Linking would hand the caller full access to the existing account, so the
+ * flow stops here: the user signs in with their password and links the provider
+ * from account settings instead.
+ */
+export class OAuthLinkNotVerifiedError extends Error {
+  constructor(provider: string) {
+    super(`${provider} did not verify this email address, so it cannot be linked to an existing account.`);
+    this.name = "OAuthLinkNotVerifiedError";
+  }
+}
 const sessionLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const passwordResetLifetimeMs = 60 * 60 * 1000;
 
@@ -26,6 +41,7 @@ type SessionUserRecord = Prisma.UserGetPayload<{
         tenant: true;
       };
     };
+    mentorProfile: true;
   };
 }>;
 
@@ -122,6 +138,16 @@ export class AuthService {
         });
       }
 
+      if (payload.accountType === "mentor") {
+        await tx.mentorProfile.create({
+          data: {
+            userId: user.id,
+            headline: payload.headline?.trim() || null,
+            expertiseJson: (payload.expertise ?? []) as Prisma.InputJsonValue
+          }
+        });
+      }
+
       await tx.auditLog.create({
         data: {
           actorUserId: user.id,
@@ -161,7 +187,8 @@ export class AuthService {
             include: {
               tenant: true
             }
-          }
+          },
+          mentorProfile: true
         }
       });
 
@@ -184,11 +211,12 @@ export class AuthService {
           include: {
             tenant: true
           }
-        }
+        },
+        mentorProfile: true
       }
     });
 
-    if (!user || !this.verifyPassword(payload.password, user.passwordHash)) {
+    if (!user || !user.passwordHash || !this.verifyPassword(payload.password, user.passwordHash)) {
       throw new UnauthorizedException("Invalid email or password.");
     }
 
@@ -221,6 +249,96 @@ export class AuthService {
       token,
       session: this.toSessionPayload(user)
     };
+  }
+
+  /** Creates a session for an already-authenticated user (used by OAuth callbacks). */
+  async createSessionForUser(userId: string, userAgent?: string, ipAddress?: string): Promise<string> {
+    const token = this.generateOpaqueToken();
+    await this.prisma.session.create({
+      data: {
+        userId,
+        refreshTokenHash: this.hashOpaqueToken(token),
+        userAgent,
+        ipAddress,
+        expiresAt: new Date(Date.now() + sessionLifetimeMs)
+      }
+    });
+    return token;
+  }
+
+  /**
+   * Resolves an OAuth identity to a user: returns the linked account's user if
+   * present, otherwise links to an existing account ONLY when the provider has
+   * verified the email, otherwise provisions a new passwordless individual
+   * account. Returns the user id.
+   *
+   * `emailVerified` is load-bearing, not advisory: an unverified email that
+   * matches an existing account is refused ({@link OAuthLinkNotVerifiedError})
+   * because an attacker can put any address in their own provider profile.
+   */
+  async findOrCreateOAuthUser(input: {
+    provider: string;
+    providerAccountId: string;
+    email: string;
+    fullName: string;
+    emailVerified: boolean;
+  }): Promise<string> {
+    const linked = await this.prisma.oAuthAccount.findUnique({
+      where: { provider_providerAccountId: { provider: input.provider, providerAccountId: input.providerAccountId } }
+    });
+    if (linked) {
+      return linked.userId;
+    }
+
+    const email = input.email.trim().toLowerCase();
+    let user = await this.prisma.user.findUnique({ where: { email } });
+    if (user) {
+      if (!input.emailVerified) {
+        await this.prisma.auditLog.create({
+          data: {
+            actorUserId: user.id,
+            action: "auth.oauth_link_refused",
+            entityType: "user",
+            entityId: user.id,
+            metadata: { provider: input.provider, reason: "email_unverified" }
+          }
+        });
+        throw new OAuthLinkNotVerifiedError(input.provider);
+      }
+    } else {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          fullName: input.fullName.trim() || email,
+          passwordHash: null,
+          accountType: UserAccountType.individual
+        }
+      });
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId: user.id,
+          action: "auth.oauth_register",
+          entityType: "user",
+          entityId: user.id,
+          metadata: { provider: input.provider, emailVerified: input.emailVerified }
+        }
+      });
+    }
+
+    await this.prisma.oAuthAccount.create({
+      data: { userId: user.id, provider: input.provider, providerAccountId: input.providerAccountId }
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId: user.id,
+        action: "auth.oauth_login",
+        entityType: "oauth_account",
+        entityId: user.id,
+        metadata: { provider: input.provider, emailVerified: input.emailVerified }
+      }
+    });
+
+    return user.id;
   }
 
   async refresh(token: string | undefined): Promise<{ token: string; session: AuthSessionPayload } | null> {
@@ -381,6 +499,7 @@ export class AuthService {
               tenant: true;
             };
           };
+          mentorProfile: true;
         };
       };
     };
@@ -397,6 +516,7 @@ export class AuthService {
               tenant: true;
             };
           };
+          mentorProfile: true;
         };
       };
     };
@@ -421,7 +541,8 @@ export class AuthService {
               include: {
                 tenant: true
               }
-            }
+            },
+            mentorProfile: true
           }
         }
       }
@@ -457,6 +578,7 @@ export class AuthService {
             }
           }
         : null,
+      mentor: user.mentorProfile ? { id: user.mentorProfile.id } : null,
       permissions: this.getPermissions(activeMembership?.role || null)
     };
   }

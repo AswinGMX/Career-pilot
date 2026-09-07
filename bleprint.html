@@ -1,0 +1,1471 @@
+<!--
+  Dynamic Forensic Watermark + Protection Layers — secure testing platform
+  Drop-in client-side engine + console UI.
+
+  Philosophy: don't fight the camera. Brand every frame so a leaked photo
+  carries the candidate's identity and is traceable back to them — then stack
+  cheap, layered deterrents (grid, noise, OCR-hostile glyphs, fullscreen lock,
+  webcam presence, tab-switch flags) on top.
+
+  PRODUCTION NOTES (this file is a single-page demo):
+   - Per-session seed, signed identity payload and the client IP must be
+     issued server-side at session start, never trusted from the client.
+   - Tamper / fullscreen-exit / tab-switch / proctoring events should stream to
+     a backend audit log (append-only) for a real integrity trail.
+   - "Webcam AI proctoring" here is a browser-side presence heuristic (with the
+     experimental FaceDetector when present). Real multi-face / identity / gaze
+     scoring belongs in a proctoring service, not the client.
+-->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dynamic Watermark — Trace Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --ink: #0d1014;
+    --panel: #14181f;
+    --panel-2: #1a1f28;
+    --hair: #262d38;
+    --hair-soft: #1f2530;
+    --txt: #e7ebf2;
+    --txt-mid: #9aa6b6;
+    --txt-dim: #67717f;
+    --signal: #f2a93b;      /* trace amber — "you are being recorded" */
+    --signal-deep: #c9892a;
+    --good: #4fd49a;
+    --bad: #ff6b6b;
+    --field: #0f1218;
+    --radius: 10px;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --ui: "Space Grotesk", system-ui, -apple-system, Segoe UI, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #161c26 0%, transparent 60%),
+      var(--ink);
+    color: var(--txt);
+    font-family: var(--ui);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.45;
+  }
+
+  .app {
+    height: 100vh;
+    height: 100dvh;          /* pin to the viewport so columns scroll internally */
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: 100%;
+  }
+
+  /* ---------- header ---------- */
+  header.bar {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--hair);
+  }
+  .brand { display: flex; flex-direction: column; gap: 3px; }
+  .brand h1 {
+    font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
+  }
+  .brand p {
+    margin: 0; font-size: 12.5px; color: var(--txt-dim);
+    font-family: var(--mono); letter-spacing: 0.01em;
+  }
+  .logomark {
+    width: 38px; height: 38px; flex: none; border-radius: 9px;
+    border: 1px solid var(--hair);
+    background: linear-gradient(145deg, #1d232d, #11151b);
+    display: grid; place-items: center; position: relative; overflow: hidden;
+  }
+  .logomark svg { width: 22px; height: 22px; }
+  .status {
+    margin-left: auto; display: flex; align-items: center; gap: 9px;
+    font-family: var(--mono); font-size: 12px; color: var(--txt-mid);
+    border: 1px solid var(--hair); border-radius: 999px;
+    padding: 7px 13px 7px 11px; background: var(--panel);
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--signal);
+    box-shadow: 0 0 0 0 rgba(242,169,59,.6);
+    animation: pulse 2.2s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(242,169,59,.55); }
+    70% { box-shadow: 0 0 0 7px rgba(242,169,59,0); }
+    100% { box-shadow: 0 0 0 0 rgba(242,169,59,0); }
+  }
+
+  /* ---------- layout ---------- */
+  .work {
+    display: grid;
+    grid-template-columns: 372px 1fr;
+    min-height: 0;
+    height: 100%;
+  }
+  .console {
+    border-right: 1px solid var(--hair);
+    padding: 22px;
+    overflow-y: auto;
+    min-height: 0;
+    display: flex; flex-direction: column; gap: 26px;
+  }
+  .stage {
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 18px;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* ---------- console groups ---------- */
+  .group { display: flex; flex-direction: column; gap: 13px; }
+  .group > .legend {
+    display: flex; align-items: baseline; gap: 9px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--txt-dim);
+  }
+  .group > .legend .num { color: var(--signal); }
+  .legend .rule { flex: 1; height: 1px; background: var(--hair-soft); }
+  label.field { display: flex; flex-direction: column; gap: 6px; }
+  label.field > span { font-size: 12.5px; color: var(--txt-mid); }
+  input[type="text"], input[type="email"] {
+    background: var(--field);
+    border: 1px solid var(--hair);
+    color: var(--txt);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-family: var(--mono);
+    font-size: 13px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input[type="text"]:focus, input[type="email"]:focus {
+    outline: none;
+    border-color: var(--signal-deep);
+    box-shadow: 0 0 0 3px rgba(242,169,59,.12);
+  }
+
+  .slider { display: flex; flex-direction: column; gap: 7px; }
+  .slider .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .slider .row span:first-child { font-size: 12.5px; color: var(--txt-mid); }
+  .slider .row .val { font-family: var(--mono); font-size: 12px; color: var(--signal); }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; border-radius: 4px;
+    background: var(--hair); cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--signal); border: 3px solid var(--ink);
+    box-shadow: 0 0 0 1px var(--signal-deep);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--signal); border: 3px solid var(--ink); border-radius: 50%;
+  }
+
+  .toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 11px 13px;
+    background: var(--field); border: 1px solid var(--hair);
+    border-radius: 8px;
+  }
+  .toggle .t-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .toggle .t-txt b { font-size: 12.5px; font-weight: 500; }
+  .toggle .t-txt small { font-size: 11px; color: var(--txt-dim); }
+  .toggle .t-meta {
+    display: flex; gap: 8px; align-items: center; margin-top: 4px;
+    font-family: var(--mono); font-size: 10px;
+  }
+  .t-meta .diff { color: var(--txt-dim); text-transform: uppercase; letter-spacing: .08em; }
+  .t-meta .eff { color: var(--signal); letter-spacing: 1px; }
+  .switch { position: relative; width: 40px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: absolute; inset: 0; border-radius: 999px;
+    background: var(--hair); transition: background .18s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #cbd3df; transition: transform .18s;
+  }
+  .switch input:checked + .track { background: var(--signal-deep); }
+  .switch input:checked + .track::after { transform: translateX(18px); background: #fff; }
+
+  /* ---------- payload readout ---------- */
+  .payload {
+    background: #0a0d12; border: 1px solid var(--hair);
+    border-radius: 8px; padding: 12px 13px;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.7;
+    color: var(--txt-mid); word-break: break-all;
+  }
+  .payload .k { color: var(--txt-dim); }
+  .payload .stamp { color: var(--signal); }
+
+  /* ---------- snippet ---------- */
+  .snippet { position: relative; }
+  .snippet pre {
+    margin: 0; background: #0a0d12; border: 1px solid var(--hair);
+    border-radius: 8px; padding: 13px; overflow-x: auto;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: #c5cdd9;
+  }
+  .snippet pre .c { color: var(--txt-dim); }
+  .snippet pre .s { color: var(--signal); }
+  .copy {
+    position: absolute; top: 8px; right: 8px;
+    background: var(--panel-2); border: 1px solid var(--hair); color: var(--txt-mid);
+    font-family: var(--mono); font-size: 11px; padding: 5px 9px;
+    border-radius: 6px; cursor: pointer; transition: all .15s;
+  }
+  .copy:hover { color: var(--txt); border-color: var(--signal-deep); }
+  /* ---------- stage / preview ---------- */
+  .stage-head { display: flex; align-items: center; gap: 12px; }
+  .stage-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .stage-head .hint { font-size: 12px; color: var(--txt-dim); font-family: var(--mono); }
+  .stage-head .actions { margin-left: auto; display: flex; gap: 9px; }
+  .btn {
+    font-family: var(--ui); font-size: 12.5px; font-weight: 500;
+    padding: 9px 15px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--hair); background: var(--panel); color: var(--txt);
+    transition: all .15s;
+  }
+  .btn:hover { border-color: var(--signal-deep); }
+  .btn.primary { background: var(--signal); color: #1a1206; border-color: var(--signal); font-weight: 600; }
+  .btn.primary:hover { background: #ffba4d; }
+
+  .screen-wrap { position: relative; flex: 1; min-height: 460px; }
+  .screen {
+    position: absolute; inset: 0;
+    background: #fbfcfe; color: #1c2530; border-radius: 14px;
+    border: 1px solid var(--hair);
+    overflow: hidden;
+    isolation: isolate;           /* trap the watermark canvas z-index here */
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,.7);
+    transition: transform .5s cubic-bezier(.2,.8,.2,1), filter .5s;
+  }
+  /* ============ assessment screen (veril.ai layout) ============ */
+  .exam {
+    padding: 0; height: 100%;
+    display: flex; flex-direction: column;
+    background: #ffffff; color: #1f2430; font-family: var(--ui);
+  }
+  /* top bar */
+  .ex-top {
+    flex: none; display: flex; align-items: center; gap: 13px;
+    padding: 14px 22px; border-bottom: 1px solid #edeef3;
+  }
+  .ex-brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 15px; color: #2a2e39; }
+  .ex-brand .ex-logo { width: 22px; height: 22px; }
+  .ex-brand i { font-style: normal; font-weight: 600; font-size: 10px; color: #7c6cf0; align-self: flex-start; margin-top: 2px; }
+  .ex-pill {
+    font-size: 11px; font-weight: 700; letter-spacing: .03em;
+    padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+  }
+  .ex-pill-q { color: #4f46e5; background: #eef0ff; border: 1px solid #dde0ff; }
+  .ex-pill-diff { color: #8071e8; background: #f1edfd; }
+  .ex-title { font-size: 15px; font-weight: 700; margin: 0; color: #20242e; letter-spacing: -0.01em; }
+  .ex-exit {
+    margin-left: auto; font-family: var(--ui); font-weight: 600; font-size: 13px;
+    color: #fff; background: #f6a623; border: none; border-radius: 9px;
+    padding: 9px 16px; cursor: pointer; transition: background .15s;
+  }
+  .ex-exit:hover { background: #ec9a12; }
+  /* progress strip */
+  .ex-progress { flex: none; height: 3px; background: #eef0f4; }
+  .ex-progress > span { display: block; height: 100%; background: linear-gradient(90deg, #f6a623, #6c5ce7); transition: width .3s; }
+  /* body: question | answers */
+  .ex-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; overflow: auto; }
+  .ex-question { padding: 26px 32px; border-right: 1px solid #edeef3; }
+  .ex-question .q { font-size: 15px; line-height: 1.75; color: #353b47; margin: 0 0 18px; }
+  .ex-question .q-hint { font-size: 14px; font-weight: 700; color: #2a2f3a; margin: 0; line-height: 1.6; }
+  .ex-question pre.code {
+    background: #1a1d24; color: #d6dde7; border-radius: 10px; padding: 16px 18px; margin: 0;
+    font-family: var(--mono); font-size: 13px; line-height: 1.6; overflow-x: auto;
+  }
+  .ex-question pre.code .kw { color: #f2a93b; }
+  .ex-question pre.code .st { color: #7fd99f; }
+  .ex-answers { padding: 26px 32px; display: flex; flex-direction: column; gap: 12px; }
+  .ex-ans-label { font-size: 11px; font-weight: 700; letter-spacing: .09em; color: #9aa1ad; margin-bottom: 3px; }
+  .ex-opt {
+    display: flex; align-items: flex-start; gap: 13px; width: 100%; text-align: left;
+    padding: 16px 18px; border: 1px solid #e6e8ee; border-radius: 12px; background: #fff;
+    cursor: pointer; font-family: inherit; font-size: 14px; color: #353b47; line-height: 1.5;
+    transition: border-color .12s, box-shadow .12s, background .12s;
+  }
+  .ex-opt:hover { border-color: #c7ccfb; background: #fafbff; }
+  .ex-opt .radio {
+    width: 19px; height: 19px; border-radius: 50%; border: 2px solid #cfd4de; flex: none; margin-top: 1px;
+    transition: border-color .12s, background .12s;
+  }
+  .ex-opt.sel { border-color: #6c5ce7; box-shadow: 0 0 0 3px rgba(108,92,231,.13); background: #fbfaff; }
+  .ex-opt.sel .radio { border-color: #6c5ce7; background: radial-gradient(circle at center, #6c5ce7 0 42%, #fff 47%); }
+  .ex-opt .opt-text { min-width: 0; }
+  /* footer */
+  .ex-foot {
+    flex: none; display: flex; align-items: center; gap: 16px;
+    padding: 13px 22px; border-top: 1px solid #edeef3;
+    transition: padding .25s;
+  }
+  .screen.cam-on .ex-foot { padding-right: 200px; }   /* reserve space for proctor cam */
+  .ex-status {
+    display: flex; align-items: stretch; border: 1px solid #edeef3; border-radius: 14px;
+    overflow: hidden; box-shadow: 0 10px 24px -16px rgba(20,24,40,.3);
+  }
+  .ex-integrity { padding: 9px 18px; background: #fdfcf2; display: flex; flex-direction: column; justify-content: center; gap: 7px; min-width: 142px; }
+  .ex-k { font-size: 10px; font-weight: 700; letter-spacing: .06em; color: #9a927c; display: flex; gap: 6px; align-items: center; }
+  .ex-integrity .ex-k b { color: #2ca35b; font-weight: 700; }
+  .ex-integrity .ex-k.warn b { color: #d98a1f; }
+  .ex-integrity .ex-k.bad b { color: #d6433b; }
+  .ex-bar { height: 6px; border-radius: 999px; background: #e9ead4; overflow: hidden; }
+  .ex-bar > span { display: block; height: 100%; width: 86%; background: #34c46b; transition: width .4s, background .4s; }
+  .ex-timer { padding: 9px 18px; background: #f1eefe; display: flex; align-items: center; gap: 12px; }
+  .ex-clock { width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 1px solid #ddd6fb; color: #6c5ce7; display: grid; place-items: center; flex: none; }
+  .ex-clock svg { width: 16px; height: 16px; }
+  .ex-timer-txt { display: flex; flex-direction: column; }
+  .ex-timer-txt .ex-k { color: #9a93c4; }
+  .ex-time { font-family: var(--mono); font-weight: 700; font-size: 18px; color: #5b4be0; letter-spacing: .02em; line-height: 1.15; }
+  .ex-live { font-size: 10px; color: #8a90a0; display: flex; align-items: center; gap: 5px; margin-top: 1px; }
+  .ex-live .ld { width: 6px; height: 6px; border-radius: 50%; background: #6c5ce7; }
+  .ex-next {
+    margin-left: auto; display: flex; align-items: center; gap: 8px;
+    font-family: inherit; font-weight: 600; font-size: 14px; color: #2a2f3a;
+    background: #fff; border: 1px solid #e0e3ea; border-radius: 12px; padding: 13px 22px;
+    cursor: pointer; box-shadow: 0 8px 18px -14px rgba(20,24,40,.35); transition: border-color .15s;
+  }
+  .ex-next:hover { border-color: #c7ccfb; }
+
+  /* ---------- protection layers (stacked inside .screen) ---------- */
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+
+  /* Blueprint / grid background */
+  .bp-grid {
+    z-index: 3; opacity: 0; transition: opacity .35s;
+    background-image:
+      linear-gradient(rgba(28,37,48,.16) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(28,37,48,.16) 1px, transparent 1px),
+      linear-gradient(rgba(28,37,48,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(28,37,48,.07) 1px, transparent 1px);
+    background-size: 88px 88px, 88px 88px, 11px 11px, 11px 11px;
+    background-position: -1px -1px;
+  }
+  .screen.bp-on .bp-grid { opacity: 1; }
+
+  /* Transparent noise overlay */
+  .noise-layer {
+    z-index: 4; width: 100%; height: 100%;
+    opacity: 0; transition: opacity .35s;
+    mix-blend-mode: multiply; image-rendering: pixelated;
+  }
+  .screen.noise-on .noise-layer { opacity: .55; }
+
+  /* OCR-resistant font + character spacing variation (per-glyph) */
+  .glyph { display: inline-block; will-change: transform; }
+  .exam.cs-on .glyph { margin-right: calc(.05em + var(--j, 0) * .12em); }
+  .exam.ocr-on { font-family: "Courier New", ui-monospace, monospace; }
+  .exam.ocr-on .glyph {
+    transform: rotate(calc(var(--j, 0) * 5deg))
+               translateY(calc(var(--j, 0) * 1.3px))
+               scaleX(calc(1 + var(--j, 0) * .05));
+    text-shadow: .45px 0 rgba(28,37,48,.5), -.45px .3px rgba(28,37,48,.28);
+    font-weight: 600;
+  }
+
+  /* "photographed" simulation */
+  .screen.shot {
+    transform: perspective(1400px) rotateX(2.5deg) rotateZ(-1.4deg) scale(.97);
+    filter: contrast(1.06) saturate(1.05) brightness(.98);
+  }
+  .glare {
+    position: absolute; inset: 0; pointer-events: none; border-radius: 14px;
+    opacity: 0; transition: opacity .5s; z-index: 50;
+    background:
+      linear-gradient(115deg, rgba(255,255,255,.22) 0%, transparent 30%),
+      radial-gradient(140% 80% at 70% 10%, rgba(255,255,255,.18), transparent 55%),
+      radial-gradient(120% 120% at 50% 120%, rgba(0,0,0,.28), transparent 60%);
+  }
+  .screen-wrap.captured .glare { opacity: 1; }
+  .cap-note {
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+    z-index: 60; font-family: var(--mono); font-size: 11.5px;
+    background: rgba(13,16,20,.86); color: var(--signal);
+    border: 1px solid var(--signal-deep); border-radius: 999px;
+    padding: 7px 15px; opacity: 0; transition: opacity .4s; pointer-events: none;
+    white-space: nowrap;
+  }
+  .screen-wrap.captured .cap-note { opacity: 1; }
+
+  /* Webcam AI proctoring thumbnail */
+  .cam-wrap {
+    position: absolute; bottom: 14px; right: 14px; width: 178px; z-index: 70;
+    border-radius: 12px; overflow: hidden; border: 2px solid #fff;
+    background: #11131a; box-shadow: 0 16px 36px -14px rgba(15,18,30,.55);
+    opacity: 0; transform: translateY(8px); pointer-events: none;
+    transition: opacity .3s, transform .3s;
+  }
+  .cam-wrap.show { opacity: 1; transform: none; }
+  .cam { width: 100%; height: 116px; object-fit: cover; display: block; background: #11131a; transform: scaleX(-1); }
+  .cam-recdot {
+    position: absolute; top: 8px; right: 9px; width: 9px; height: 9px; border-radius: 50%;
+    background: #ff4d4d; animation: pulse-red 1.6s infinite;
+  }
+  @keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(255,77,77,.6); }
+    70% { box-shadow: 0 0 0 6px rgba(255,77,77,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,77,77,0); }
+  }
+  .cam-rec {
+    position: absolute; bottom: 7px; right: 9px;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .04em; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.85);
+  }
+  .cam-badge {
+    position: absolute; bottom: 7px; left: 8px;
+    font-family: var(--mono); font-size: 9.5px; padding: 3px 7px; border-radius: 6px;
+    color: #0c2a18; background: var(--good);
+  }
+  .cam-badge.warn { background: var(--signal); color: #2a1c06; }
+  .cam-badge.bad  { background: var(--bad); color: #2a0d0d; }
+  .cam-badge.ok   { background: var(--good); }
+
+  /* Full-screen enforcement overlay */
+  .fs-overlay {
+    position: absolute; inset: 0; z-index: 90; display: none; place-items: center;
+    background: rgba(8,11,16,.86); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    border-radius: 14px;
+  }
+  .fs-overlay.show { display: grid; }
+  .fs-card { text-align: center; max-width: 300px; padding: 26px; }
+  .fs-card h4 { margin: 0 0 8px; font-size: 16px; color: var(--txt); }
+  .fs-card p { margin: 0 0 16px; font-size: 13px; color: var(--txt-mid); line-height: 1.5; }
+
+  /* Tab-switch toast */
+  .tab-toast {
+    position: absolute; top: 14px; left: 50%; transform: translate(-50%, -12px);
+    z-index: 95; font-family: var(--mono); font-size: 11.5px; padding: 8px 14px;
+    background: rgba(13,16,20,.92); color: var(--signal);
+    border: 1px solid var(--signal-deep); border-radius: 999px;
+    opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s; white-space: nowrap;
+  }
+  .tab-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ---------- telemetry strip ---------- */
+  .telemetry {
+    display: grid; grid-template-columns: repeat(4, auto) 1fr; gap: 14px; align-items: center;
+    border-top: 1px solid var(--hair-soft); padding-top: 14px;
+  }
+  .telemetry .stat { display: flex; flex-direction: column; gap: 2px; }
+  .telemetry .s-k { font-size: 10px; font-family: var(--mono); color: var(--txt-dim); text-transform: uppercase; letter-spacing: .08em; }
+  .telemetry .s-v { font-family: var(--mono); font-size: 14px; color: var(--signal); }
+  .telemetry .s-v.ok { color: var(--good); }
+  .telemetry .s-v.bad { color: var(--bad); }
+  .event-log {
+    min-width: 0; max-height: 76px; overflow: auto; display: flex; flex-direction: column; gap: 3px;
+    border-left: 1px solid var(--hair-soft); padding-left: 14px;
+  }
+  .event-log:empty::before { content: "no events yet"; color: var(--txt-dim); font-family: var(--mono); font-size: 11px; }
+  .ev { font-family: var(--mono); font-size: 11px; color: var(--txt-mid); white-space: nowrap; }
+  .ev .ev-t { color: var(--txt-dim); }
+  .ev.ev-warn .ev-m { color: var(--signal); }
+  .ev.ev-bad .ev-m  { color: var(--bad); }
+  .ev.ev-ok .ev-m   { color: var(--good); }
+
+  .stage-foot {
+    font-size: 12px; color: var(--txt-dim); font-family: var(--mono);
+    border-top: 1px solid var(--hair-soft); padding-top: 14px; line-height: 1.7;
+  }
+  .stage-foot b { color: var(--txt-mid); font-weight: 500; }
+  /* ---------- responsive ---------- */
+  @media (max-width: 920px) {
+    .app { height: auto; grid-template-rows: auto auto; }
+    .work { grid-template-columns: 1fr; height: auto; }
+    .console { border-right: none; border-bottom: 1px solid var(--hair); overflow-y: visible; }
+    .screen-wrap { min-height: 520px; }
+    .telemetry { grid-template-columns: repeat(2, 1fr); }
+    .event-log { grid-column: 1 / -1; border-left: none; padding-left: 0; padding-top: 8px; border-top: 1px solid var(--hair-soft); }
+    .ex-body { grid-template-columns: 1fr; }
+    .ex-question { border-right: none; border-bottom: 1px solid #edeef3; }
+    .ex-title { display: none; }
+    .ex-foot, .screen.cam-on .ex-foot { padding: 13px 16px; flex-wrap: wrap; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot { animation: none; }
+    .screen { transition: none; }
+  }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="logomark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#f2a93b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3.2"/>
+        <path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"/>
+      </svg>
+    </div>
+    <div class="brand">
+      <h1>Dynamic Watermark</h1>
+      <p>forensic trace layer · secure assessment</p>
+    </div>
+    <div class="status"><span class="dot"></span> TRACING ACTIVE</div>
+  </header>
+
+  <div class="work">
+    <!-- ============ CONSOLE ============ -->
+    <aside class="console">
+      <div class="group">
+        <div class="legend"><span class="num">01</span> Identity payload <span class="rule"></span></div>
+        <label class="field"><span>Candidate name</span>
+          <input id="f-name" type="text" value="Veera N." /></label>
+        <label class="field"><span>Candidate ID</span>
+          <input id="f-id" type="text" value="CND-48201" /></label>
+        <label class="field"><span>Email</span>
+          <input id="f-email" type="email" value="veera@veril.ai" /></label>
+        <label class="field"><span>Session ID</span>
+          <input id="f-session" type="text" value="SES-9F3A-7C12" /></label>
+        <label class="field"><span>Exam</span>
+          <input id="f-exam" type="text" value="Backend Engineer · L2" /></label>
+      </div>
+
+      <div class="group">
+        <div class="legend"><span class="num">02</span> Appearance <span class="rule"></span></div>
+        <div class="slider">
+          <div class="row"><span>Opacity</span><span class="val" id="v-opacity">14%</span></div>
+          <input id="s-opacity" type="range" min="3" max="40" value="14" />
+        </div>
+        <div class="slider">
+          <div class="row"><span>Text size</span><span class="val" id="v-size">14px</span></div>
+          <input id="s-size" type="range" min="9" max="26" value="14" />
+        </div>
+        <div class="slider">
+          <div class="row"><span>Tile spacing</span><span class="val" id="v-gap">90px</span></div>
+          <input id="s-gap" type="range" min="40" max="180" value="90" />
+        </div>
+        <div class="slider">
+          <div class="row"><span>Angle</span><span class="val" id="v-angle">-30°</span></div>
+          <input id="s-angle" type="range" min="-60" max="60" value="-30" />
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="legend"><span class="num">03</span> Behaviour <span class="rule"></span></div>
+        <div class="slider">
+          <div class="row"><span>Drift speed</span><span class="val" id="v-drift">1.0×</span></div>
+          <input id="s-drift" type="range" min="0" max="30" value="10" />
+        </div>
+        <div class="toggle">
+          <div class="t-txt"><b>Dynamic user watermark</b><small>Master switch for the forensic layer</small>
+            <div class="t-meta"><span class="diff">Easy</span><span class="eff">★★★★★</span></div></div>
+          <label class="switch"><input id="t-wm" type="checkbox" checked /><span class="track"></span></label>
+        </div>
+        <div class="toggle">
+          <div class="t-txt"><b>Live timestamp</b><small>Re-stamps the clock every second</small></div>
+          <label class="switch"><input id="t-time" type="checkbox" checked /><span class="track"></span></label>
+        </div>
+        <div class="toggle">
+          <div class="t-txt"><b>Bind client IP</b><small>Adds source address to the payload</small></div>
+          <label class="switch"><input id="t-ip" type="checkbox" checked /><span class="track"></span></label>
+        </div>
+        <div class="toggle">
+          <div class="t-txt"><b>Tamper guard</b><small>Re-injects the layer if it's removed</small></div>
+          <label class="switch"><input id="t-tamper" type="checkbox" checked /><span class="track"></span></label>
+        </div>
+        <div class="toggle">
+          <div class="t-txt"><b>OCR pattern</b><small>Render background lines into the tile</small></div>
+          <label class="switch"><input id="t-ocr" type="checkbox" checked /><span class="track"></span></label>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="legend"><span class="num">04</span> Protection layers <span class="rule"></span></div>
+
+        <div class="toggle">
+          <div class="t-txt"><b>Blueprint / grid background</b><small>Faint CAD grid baked behind the exam</small>
+            <div class="t-meta"><span class="diff">Easy</span><span class="eff">★★★★☆</span></div></div>
+          <label class="switch"><input id="t-grid" type="checkbox" /><span class="track"></span></label>
+        </div>
+
+        <div class="toggle">
+          <div class="t-txt"><b>Per-session watermark position</b><small>Seeds the layer offset from the session ID</small>
+            <div class="t-meta"><span class="diff">Medium</span><span class="eff">★★★★☆</span></div></div>
+          <label class="switch"><input id="t-pos" type="checkbox" /><span class="track"></span></label>
+        </div>
+
+        <div class="toggle">
+          <div class="t-txt"><b>Transparent noise overlay</b><small>Animated grain disrupts OCR &amp; compression</small>
+            <div class="t-meta"><span class="diff">Easy</span><span class="eff">★★★★☆</span></div></div>
+          <label class="switch"><input id="t-noise" type="checkbox" /><span class="track"></span></label>
+        </div>
+
+        <div class="toggle">
+          <div class="t-txt"><b>OCR-resistant font</b><small>Per-glyph rotation, weight &amp; shadow jitter</small>
+            <div class="t-meta"><span class="diff">Medium</span><span class="eff">★★★☆☆</span></div></div>
+          <label class="switch"><input id="t-ocr-font" type="checkbox" /><span class="track"></span></label>
+        </div>
+
+        <div class="toggle">
+          <div class="t-txt"><b>Character spacing variation</b><small>Randomised kerning breaks text matching</small>
+            <div class="t-meta"><span class="diff">Medium</span><span class="eff">★★★★☆</span></div></div>
+          <label class="switch"><input id="t-cs" type="checkbox" /><span class="track"></span></label>
+        </div>
+
+        <div class="toggle">
+          <div class="t-txt"><b>Full-screen enforcement</b><small>Locks the viewport; logs every exit</small>
+            <div class="t-meta"><span class="diff">Easy</span><span class="eff">★★★★☆</span></div></div>
+          <label class="switch"><input id="t-fs" type="checkbox" /><span class="track"></span></label>
+        </div>
+
+        <div class="toggle">
+          <div class="t-txt"><b>Webcam AI proctoring</b><small>Live face / presence detection</small>
+            <div class="t-meta"><span class="diff">Hard</span><span class="eff">★★★★★</span></div></div>
+          <label class="switch"><input id="t-cam" type="checkbox" /><span class="track"></span></label>
+        </div>
+
+        <div class="toggle">
+          <div class="t-txt"><b>Tab-switch detection</b><small>Flags focus loss &amp; tab changes</small>
+            <div class="t-meta"><span class="diff">Easy</span><span class="eff">★★★☆☆</span></div></div>
+          <label class="switch"><input id="t-tab" type="checkbox" /><span class="track"></span></label>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="legend"><span class="num">05</span> Live payload <span class="rule"></span></div>
+        <div class="payload" id="payload-out"></div>
+      </div>
+
+      <div class="group">
+        <div class="legend"><span class="num">06</span> Integration <span class="rule"></span></div>
+        <div class="snippet">
+          <button class="copy" id="copy-btn">copy</button>
+          <pre id="snippet"></pre>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============ STAGE ============ -->
+    <main class="stage">
+      <div class="stage-head">
+        <h2>Candidate screen</h2>
+        <span class="hint">live preview</span>
+        <div class="actions">
+          <button class="btn" id="tamper-btn">Try to remove layer</button>
+          <button class="btn primary" id="capture-btn">Simulate phone photo</button>
+        </div>
+      </div>
+
+      <div class="screen-wrap" id="screen-wrap">
+        <div class="screen" id="screen">
+          <div class="exam" id="exam">
+            <header class="ex-top">
+              <span class="ex-brand">
+                <svg class="ex-logo" viewBox="0 0 24 24" fill="none"><path d="M4 5l8 14 8-14" stroke="#6c5ce7" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                veril<i>.ai</i>
+              </span>
+              <span class="ex-pill ex-pill-q" id="ex-qnum">QUESTION 1/8</span>
+              <span class="ex-pill ex-pill-diff">EASY</span>
+              <h3 class="ex-title" data-protect>Concurrency &amp; race conditions</h3>
+              <button class="ex-exit" type="button" id="ex-exit">Exit Assessment</button>
+            </header>
+
+            <div class="ex-progress"><span id="ex-prog" style="width:12.5%"></span></div>
+
+            <div class="ex-body" style="opacity: 70%;">
+              <div class="ex-question" >
+                <p class="q" data-protect>Two requests increment the same counter without a lock. Which outcome is possible?</p>
+                <pre class="code"><span class="kw">async function</span> bump(id) {
+  <span class="kw">const</span> c = <span class="kw">await</span> db.get(id);
+  <span class="kw">await</span> db.set(id, c.value + <span class="st">1</span>);
+}</pre>
+              </div>
+              <div class="ex-answers" id="ex-answers">
+                <div class="ex-ans-label">SELECT ONE ANSWER</div>
+                <button class="ex-opt" type="button"><span class="radio"></span><span class="opt-text" data-protect>The counter always lands on the correct total</span></button>
+                <button class="ex-opt" type="button"><span class="radio"></span><span class="opt-text" data-protect>A lost update — one increment is silently overwritten</span></button>
+                <button class="ex-opt" type="button"><span class="radio"></span><span class="opt-text" data-protect>The database throws a deadlock on every call</span></button>
+                <button class="ex-opt" type="button"><span class="radio"></span><span class="opt-text" data-protect>Both writes are merged automatically</span></button>
+              </div>
+            </div>
+
+            <footer class="ex-foot">
+              <div class="ex-status">
+                <div class="ex-integrity">
+                  <div class="ex-k" id="ex-integ-k">INTEGRITY <b>✓ Good</b></div>
+                  <div class="ex-bar"><span id="ex-integ-bar" style="width:86%"></span></div>
+                </div>
+                <div class="ex-timer">
+                  <span class="ex-clock"><svg viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg></span>
+                  <div class="ex-timer-txt">
+                    <div class="ex-k">REMAINING</div>
+                    <div class="ex-time" id="ex-time">00:14:52</div>
+                    <div class="ex-live"><span class="ld"></span> Live</div>
+                  </div>
+                </div>
+              </div>
+              <button class="ex-next" type="button" id="ex-next">Next ›</button>
+            </footer>
+          </div>
+
+          <!-- stacked protection layers (watermark canvas is injected after these) -->
+          <div class="layer bp-grid"></div>
+          <canvas class="layer noise-layer" id="noise-canvas"></canvas>
+        </div>
+
+        <!-- screen-wrap overlays (sit above the watermark canvas) -->
+        <div class="cam-wrap" id="cam-wrap">
+          <video class="cam" id="cam" muted playsinline></video>
+          <span class="cam-recdot"></span>
+          <div class="cam-badge" id="cam-badge">starting…</div>
+          <div class="cam-rec">REC · Live</div>
+        </div>
+        <div class="fs-overlay" id="fs-overlay">
+          <div class="fs-card">
+            <h4>Full-screen required</h4>
+            <p>You left full-screen mode. This event was logged. Return to continue your assessment.</p>
+            <button class="btn primary" id="fs-return">Return to full-screen</button>
+          </div>
+        </div>
+        <div class="tab-toast" id="tab-toast">⚠ Tab switch detected — logged</div>
+
+        <div class="glare"></div>
+        <div class="cap-note" id="cap-note">Leaked frame carries the candidate's identity — traceable</div>
+      </div>
+
+      <div class="telemetry">
+        <div class="stat"><span class="s-k">Tab switches</span><span class="s-v" id="c-tab">0</span></div>
+        <div class="stat"><span class="s-k">Full-screen</span><span class="s-v" id="fs-state">off</span></div>
+        <div class="stat"><span class="s-k">Tab guard</span><span class="s-v" id="tab-state">off</span></div>
+        <div class="stat"><span class="s-k">Proctor</span><span class="s-v" id="proctor-state">off</span></div>
+        <div class="event-log" id="event-log"></div>
+      </div>
+
+      <div class="stage-foot">
+        <b>How it holds up:</b> the watermark drifts continuously so a crop never lands on a clean edge ·
+        the timestamp pins the exact second of capture · removing the node re-injects it · text is painted
+        to canvas, not DOM, so it survives "inspect &amp; delete". The grid, noise and per-glyph jitter
+        degrade OCR; fullscreen, tab-switch and webcam layers log integrity events.
+        <br><b>Note:</b> webcam &amp; fullscreen need a secure context (https or localhost) — over <b>file://</b>
+        the camera will be blocked and that denial is logged, by design.
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   WatermarkEngine — drop-in forensic overlay
+   - paints tiled, rotated identity text to a <canvas>
+   - drifts continuously, re-stamps a live clock
+   - DPR-aware (crisp on retina), pointer-events:none
+   - optional tamper guard re-injects the layer if removed
+   - optional per-session base offset (deterministic from a seed)
+   ============================================================ */
+class WatermarkEngine {
+  constructor(opts = {}) {
+    this.target = opts.target || document.body;
+    this.payload = opts.payload || {};
+    this.opacity = opts.opacity ?? 0.14;
+    this.fontSize = opts.fontSize ?? 14;
+    this.gap = opts.gap ?? 90;
+    this.angle = opts.angle ?? -30;
+    this.driftSpeed = opts.driftSpeed ?? 1;     // 0 = static
+    this.liveTime = opts.liveTime ?? true;
+    this.color = opts.color || '#1c2530';
+    this.tamperGuard = opts.tamperGuard ?? true;
+    this.ocrPattern = opts.ocrPattern ?? true;
+    this.enabled = opts.enabled ?? true;        // master switch
+    this.sessionPos = opts.sessionPos ?? false; // per-session base offset
+    this.posSeed = opts.posSeed || '';
+
+    this._line = '';
+    this._lastStamp = 0;
+    this._base = { x: 0, y: 0 };
+    this._tile = document.createElement('canvas');
+    this._tileCtx = this._tile.getContext('2d');
+    this._pattern = null;
+    this._computeBase();
+    this._mount();
+  }
+  _mount() {
+    if (getComputedStyle(this.target).position === 'static') {
+      this.target.style.position = 'relative';
+    }
+    this.canvas = document.createElement('canvas');
+    this.canvas.setAttribute('aria-hidden', 'true');
+    this.canvas.dataset.wm = '1';
+    Object.assign(this.canvas.style, {
+      position: 'absolute', top: '0', left: '0',
+      width: '100%', height: '100%',
+      pointerEvents: 'none', zIndex: '2147483646',
+    });
+    this.ctx = this.canvas.getContext('2d');
+    this.target.appendChild(this.canvas);
+
+    this._resize();
+    this._ro = new ResizeObserver(() => this._resize());
+    this._ro.observe(this.target);
+
+    if (this.tamperGuard) this._guard();
+    this._tick = this._tick.bind(this);
+    this._raf = requestAnimationFrame(this._tick);
+  }
+
+  // Deterministic per-session base offset (FNV-1a → two pseudo-random axes).
+  // In production the seed should be a server-issued, signed session token.
+  _computeBase() {
+    if (!this.sessionPos || !this.posSeed) { this._base = { x: 0, y: 0 }; return; }
+    let h = 2166136261;
+    const s = String(this.posSeed);
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    const a = (h >>> 0) / 4294967295;
+    const b = (Math.imul(h ^ 0x9e3779b9, 2654435761) >>> 0) / 4294967295;
+    this._base = { x: (a * 2 - 1) * 210, y: (b * 2 - 1) * 150 };
+  }
+
+  _resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = this.target.getBoundingClientRect();
+    this._w = Math.max(1, r.width);
+    this._h = Math.max(1, r.height);
+    this._dpr = dpr;
+    this.canvas.width = Math.round(this._w * dpr);
+    this.canvas.height = Math.round(this._h * dpr);
+    this._buildTile();
+  }
+
+  _composeLine() {
+    const p = this.payload;
+    const parts = [p.name, p.id, p.email, p.session, p.exam].filter(Boolean);
+    if (p.ip) parts.push(p.ip);
+    if (this.liveTime) {
+      parts.push(new Date().toISOString().replace('T', ' ').slice(0, 19) + 'Z');
+    }
+    return parts.join('   •   ');
+  }
+
+  // Build one seamlessly-tileable cell of horizontal text; the whole
+  // pattern gets rotated by the main context when painted.
+  _buildTile() {
+    const line = this._composeLine();
+    this._line = line;
+    const dpr = this._dpr;
+    const fs = this.fontSize;
+    const font = `500 ${fs}px "JetBrains Mono", monospace`;
+
+    this._tileCtx.font = font;
+    const textW = Math.ceil(this._tileCtx.measureText(line).width);
+    const cellW = textW + this.gap * 1.6;
+    const cellH = fs + this.gap;
+
+    this._tile.width = Math.max(1, Math.round(cellW * dpr));
+    this._tile.height = Math.max(1, Math.round(cellH * dpr));
+    const t = this._tileCtx;
+    t.setTransform(dpr, 0, 0, dpr, 0, 0);
+    t.clearRect(0, 0, cellW, cellH);
+
+    // --- OCR-Resistant pattern lines baked into the tile ---
+    if (this.ocrPattern) {
+      t.save();
+      // Same colour as text, but thick/opaque enough in the tile buffer so the
+      // lines survive the global ~0.14 opacity applied at paint time.
+      t.lineWidth = 1.5;
+      t.strokeStyle = this.color;
+      t.globalAlpha = 0.4; // 0.4 * 0.14 = ~0.05 final opacity
+      t.beginPath();
+
+      const spacing = 15;
+      for (let x = 0; x < cellW; x += spacing) { t.moveTo(x, 0); t.lineTo(x, cellH); }
+      for (let y = 0; y < cellH; y += spacing) { t.moveTo(0, y); t.lineTo(cellW, y); }
+
+      for (let x = -cellH; x < cellW; x += spacing * 2) {
+        t.moveTo(x, 0); t.lineTo(x + cellH, cellH);
+        t.moveTo(x + cellH, 0); t.lineTo(x, cellH);
+      }
+      t.stroke();
+      t.restore();
+    }
+    // ----------------------------------------
+
+    t.font = font;
+    t.fillStyle = this.color;
+    t.textBaseline = 'middle';
+    // draw thrice (offset a cell) so the seam never shows a long gap
+    t.fillText(line, 0, cellH / 2);
+    t.fillText(line, -cellW, cellH / 2);
+    t.fillText(line, cellW, cellH / 2);
+
+    this._pattern = this.ctx.createPattern(this._tile, 'repeat');
+    // counter-scale the pattern back to CSS pixels (tile is drawn at dpr)
+    if (this._pattern && this._pattern.setTransform) {
+      this._pattern.setTransform(new DOMMatrix([1 / dpr, 0, 0, 1 / dpr, 0, 0]));
+    }
+  }
+
+  _tick(ts) {
+    if (this.enabled && this.liveTime && ts - this._lastStamp > 1000) {
+      this._lastStamp = ts;
+      this._buildTile();
+    }
+    this._draw(ts);
+    this._raf = requestAnimationFrame(this._tick);
+  }
+
+  _draw(ts) {
+    const ctx = this.ctx, dpr = this._dpr, W = this._w, H = this._h;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (!this.enabled || !this._pattern) return;
+
+    const amp = 26 * this.driftSpeed;
+    const t = ts / 1000;
+    const dx = this.driftSpeed ? Math.sin(t * 0.18 * this.driftSpeed) * amp : 0;
+    const dy = this.driftSpeed ? Math.cos(t * 0.13 * this.driftSpeed) * amp : 0;
+
+    const big = Math.hypot(W, H) + amp * 2 + 260; // cover the per-session offset too
+    ctx.globalAlpha = this.opacity;
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(this.angle * Math.PI / 180);
+    ctx.translate(dx + this._base.x, dy + this._base.y);
+    ctx.fillStyle = this._pattern;
+    ctx.fillRect(-big, -big, big * 2, big * 2);
+  }
+
+  _guard() {
+    this._mo = new MutationObserver(() => {
+      if (!this.target.contains(this.canvas)) this.target.appendChild(this.canvas);
+    });
+    this._mo.observe(this.target, { childList: true });
+    this._integrity = setInterval(() => {
+      if (!this.target.contains(this.canvas)) this.target.appendChild(this.canvas);
+      if (this.canvas.style.display === 'none') this.canvas.style.display = '';
+    }, 1200);
+  }
+/* ---- public API ---- */
+  setPayload(patch) { Object.assign(this.payload, patch); this._buildTile(); }
+  setStyle(patch) {
+    Object.assign(this, patch);
+    if ('tamperGuard' in patch && !patch.tamperGuard && this._mo) {
+      this._mo.disconnect(); clearInterval(this._integrity); this._mo = null;
+    } else if (patch.tamperGuard && !this._mo) {
+      this._guard();
+    }
+    if ('sessionPos' in patch || 'posSeed' in patch) this._computeBase();
+    this._buildTile();
+  }
+  currentLine() { return this._line; }
+  destroy() {
+    cancelAnimationFrame(this._raf);
+    this._ro?.disconnect(); this._mo?.disconnect();
+    clearInterval(this._integrity);
+    this.canvas.remove();
+  }
+}
+
+/* ============================================================
+   Console wiring
+   ============================================================ */
+(function () {
+  const $ = id => document.getElementById(id);
+  const screen = $('screen');
+  const exam = $('exam');
+
+  const state = {
+    payload: {
+      name: 'Veera N.', id: 'CND-48201', email: 'veera@veril.ai',
+      session: 'SES-9F3A-7C12', exam: 'Backend Engineer · L2',
+      ip: '203.0.113.47',
+    },
+    bindIp: true,
+    tabSwitches: 0,
+  };
+
+  const engine = new WatermarkEngine({
+    target: screen,
+    payload: { ...state.payload },
+    opacity: 0.14, fontSize: 14, gap: 90, angle: -30,
+    driftSpeed: 1, liveTime: true, color: '#1c2530', tamperGuard: true,
+    ocrPattern: true, enabled: true, sessionPos: false, posSeed: state.payload.session,
+  });
+
+  /* ----------------------------------------------------------
+     Telemetry / event log
+     ---------------------------------------------------------- */
+  const Events = (function () {
+    const list = $('event-log');
+    const MAX = 50;
+    function log(msg, level = 'info') {
+      const time = new Date().toISOString().slice(11, 19);
+      const row = document.createElement('div');
+      row.className = 'ev ev-' + level;
+      const t = document.createElement('span'); t.className = 'ev-t'; t.textContent = time + ' ';
+      const m = document.createElement('span'); m.className = 'ev-m'; m.textContent = msg;
+      row.append(t, m);
+      list.prepend(row);
+      while (list.children.length > MAX) list.lastChild.remove();
+    }
+    return { log };
+  })();
+
+  function setStat(id, text, cls) {
+    const el = $(id);
+    el.textContent = text;
+    el.className = 's-v' + (cls ? ' ' + cls : '');
+  }
+
+  /* ----------------------------------------------------------
+     Assessment screen: selection, live timer, integrity meter
+     (integrity is driven by the protection layers below — tab
+      switches / fullscreen exits / tamper degrade the score)
+     ---------------------------------------------------------- */
+  // option selection (single answer)
+  const answersEl = $('ex-answers');
+  answersEl.querySelectorAll('.ex-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      answersEl.querySelectorAll('.ex-opt').forEach(o => o.classList.remove('sel'));
+      opt.classList.add('sel');
+    });
+  });
+
+  // live countdown
+  let remaining = 14 * 60 + 52; // 00:14:52
+  const fmtClock = s => '00:' + String((s / 60) | 0).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  setInterval(() => { if (remaining > 0) { remaining--; $('ex-time').textContent = fmtClock(remaining); } }, 1000);
+
+  // integrity meter
+  let integrity = 86;
+  function renderIntegrity() {
+    let label, cls, color;
+    if (integrity >= 70) { label = '✓ Good'; cls = ''; color = '#34c46b'; }
+    else if (integrity >= 40) { label = '⚠ Fair'; cls = 'warn'; color = '#e0a32a'; }
+    else { label = '✕ At risk'; cls = 'bad'; color = '#e0524a'; }
+    const k = $('ex-integ-k');
+    k.className = 'ex-k ' + cls;
+    k.innerHTML = 'INTEGRITY <b>' + label + '</b>';
+    const bar = $('ex-integ-bar');
+    bar.style.width = integrity + '%';
+    bar.style.background = color;
+  }
+  function hitIntegrity(amount, reason) {
+    integrity = Math.max(0, integrity - amount);
+    renderIntegrity();
+    Events.log('Integrity −' + amount + ' · ' + reason + ' (now ' + integrity + '%)', integrity >= 70 ? 'warn' : 'bad');
+  }
+
+  // Next / Exit (Next is cosmetic: advances the counter + progress)
+  const TOTAL_Q = 8; let qnum = 1;
+  $('ex-next').addEventListener('click', () => {
+    qnum = (qnum % TOTAL_Q) + 1;
+    $('ex-qnum').textContent = 'QUESTION ' + qnum + '/' + TOTAL_Q;
+    $('ex-prog').style.width = (qnum / TOTAL_Q * 100).toFixed(1) + '%';
+    answersEl.querySelectorAll('.ex-opt').forEach(o => o.classList.remove('sel'));
+  });
+  $('ex-exit').addEventListener('click', () => Events.log('Candidate pressed Exit Assessment', 'warn'));
+
+  /* ----------------------------------------------------------
+     Identity fields
+     ---------------------------------------------------------- */
+  const idMap = { 'f-name': 'name', 'f-id': 'id', 'f-email': 'email', 'f-session': 'session', 'f-exam': 'exam' };
+  Object.entries(idMap).forEach(([el, key]) => {
+    $(el).addEventListener('input', e => {
+      state.payload[key] = e.target.value;
+      engine.setPayload({ [key]: e.target.value });
+      if (key === 'session' && $('t-pos').checked) engine.setStyle({ posSeed: e.target.value });
+      refreshReadout();
+    });
+  });
+
+  /* ----------------------------------------------------------
+     Sliders
+     ---------------------------------------------------------- */
+  $('s-opacity').addEventListener('input', e => {
+    const v = +e.target.value; $('v-opacity').textContent = v + '%';
+    engine.setStyle({ opacity: v / 100 });
+  });
+  $('s-size').addEventListener('input', e => {
+    const v = +e.target.value; $('v-size').textContent = v + 'px';
+    engine.setStyle({ fontSize: v });
+  });
+  $('s-gap').addEventListener('input', e => {
+    const v = +e.target.value; $('v-gap').textContent = v + 'px';
+    engine.setStyle({ gap: v });
+  });
+  $('s-angle').addEventListener('input', e => {
+    const v = +e.target.value; $('v-angle').textContent = v + '°';
+    engine.setStyle({ angle: v });
+  });
+  $('s-drift').addEventListener('input', e => {
+    const v = +e.target.value / 10; $('v-drift').textContent = v.toFixed(1) + '×';
+    engine.setStyle({ driftSpeed: v });
+  });
+
+  /* ----------------------------------------------------------
+     Behaviour toggles
+     ---------------------------------------------------------- */
+  $('t-wm').addEventListener('change', e => {
+    engine.setStyle({ enabled: e.target.checked });
+    Events.log(e.target.checked ? 'Watermark layer enabled' : 'Watermark layer disabled', e.target.checked ? 'ok' : 'warn');
+  });
+  $('t-time').addEventListener('change', e => engine.setStyle({ liveTime: e.target.checked }));
+  $('t-ip').addEventListener('change', e => {
+    state.bindIp = e.target.checked;
+    engine.setPayload({ ip: e.target.checked ? state.payload.ip : '' });
+    refreshReadout();
+  });
+  $('t-tamper').addEventListener('change', e => engine.setStyle({ tamperGuard: e.target.checked }));
+  $('t-ocr').addEventListener('change', e => engine.setStyle({ ocrPattern: e.target.checked }));
+
+  /* ----------------------------------------------------------
+     Protection layer: Blueprint / grid background
+     ---------------------------------------------------------- */
+  $('t-grid').addEventListener('change', e => {
+    screen.classList.toggle('bp-on', e.target.checked);
+    Events.log('Blueprint grid ' + (e.target.checked ? 'on' : 'off'));
+  });
+
+  /* ----------------------------------------------------------
+     Protection layer: Per-session watermark position
+     ---------------------------------------------------------- */
+  $('t-pos').addEventListener('change', e => {
+    engine.setStyle({ sessionPos: e.target.checked, posSeed: state.payload.session });
+    Events.log('Per-session offset ' + (e.target.checked ? 'seeded from ' + state.payload.session : 'cleared'));
+  });
+
+  /* ----------------------------------------------------------
+     Protection layer: Transparent noise overlay
+     ---------------------------------------------------------- */
+  const Noise = (function () {
+    const cv = $('noise-canvas');
+    const ctx = cv.getContext('2d');
+    let on = false, raf = 0, last = 0;
+    function resize() {
+      const r = screen.getBoundingClientRect();
+      cv.width = Math.max(1, (r.width / 2) | 0);
+      cv.height = Math.max(1, (r.height / 2) | 0);
+    }
+    function render() {
+      const w = cv.width, h = cv.height;
+      const img = ctx.createImageData(w, h);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (Math.random() * 255) | 0;
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    function frame(ts) {
+      if (!on) return;
+      if (ts - last > 110) { last = ts; render(); }
+      raf = requestAnimationFrame(frame);
+    }
+    return {
+      start() { if (on) return; on = true; resize(); raf = requestAnimationFrame(frame); },
+      stop() { on = false; cancelAnimationFrame(raf); },
+      resize() { if (on) resize(); },
+    };
+  })();
+  $('t-noise').addEventListener('change', e => {
+    screen.classList.toggle('noise-on', e.target.checked);
+    e.target.checked ? Noise.start() : Noise.stop();
+    Events.log('Noise overlay ' + (e.target.checked ? 'on' : 'off'));
+  });
+  window.addEventListener('resize', () => Noise.resize());
+
+  /* ----------------------------------------------------------
+     Protection layers: OCR-resistant font + character spacing
+     (both rely on wrapping each exam glyph in its own <span>)
+     ---------------------------------------------------------- */
+  const ExamText = (function () {
+    let wrapped = false;
+    const originals = new Map();
+    function wrapEl(el) {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      nodes.forEach(node => {
+        const frag = document.createDocumentFragment();
+        for (const ch of node.nodeValue) {
+          if (ch === ' ' || ch === '\n' || ch === '\t') { frag.appendChild(document.createTextNode(ch)); continue; }
+          const span = document.createElement('span');
+          span.className = 'glyph';
+          span.textContent = ch;
+          span.style.setProperty('--j', (Math.random() * 2 - 1).toFixed(3));
+          frag.appendChild(span);
+        }
+        node.parentNode.replaceChild(frag, node);
+      });
+    }
+    return {
+      wrap() {
+        if (wrapped) return;
+        document.querySelectorAll('[data-protect]').forEach(el => {
+          originals.set(el, el.innerHTML);
+          wrapEl(el);
+        });
+        wrapped = true;
+      },
+      unwrap() {
+        if (!wrapped) return;
+        originals.forEach((html, el) => { el.innerHTML = html; });
+        originals.clear();
+        wrapped = false;
+      },
+    };
+  })();
+  function syncTextProtection() {
+    const cs = $('t-cs').checked, ocr = $('t-ocr-font').checked;
+    if (cs || ocr) { ExamText.unwrap(); ExamText.wrap(); } else { ExamText.unwrap(); }
+    exam.classList.toggle('cs-on', cs);
+    exam.classList.toggle('ocr-on', ocr);
+  }
+  $('t-cs').addEventListener('change', e => {
+    syncTextProtection();
+    Events.log('Character spacing variation ' + (e.target.checked ? 'on' : 'off'));
+  });
+  $('t-ocr-font').addEventListener('change', e => {
+    syncTextProtection();
+    Events.log('OCR-resistant font ' + (e.target.checked ? 'on' : 'off'));
+  });
+
+  /* ----------------------------------------------------------
+     Protection layer: Full-screen enforcement
+     ---------------------------------------------------------- */
+  const Fullscreen = (function () {
+    let on = false;
+    const wrap = $('screen-wrap');
+    const overlay = $('fs-overlay');
+    function request() {
+      const fn = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+      if (fn) Promise.resolve(fn.call(wrap)).catch(err => {
+        Events.log('Full-screen request blocked: ' + (err && err.message || 'denied'), 'warn');
+      });
+    }
+    function isFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+    function onChange() {
+      const fs = isFs();
+      if (!on) { setStat('fs-state', 'off'); overlay.classList.remove('show'); return; }
+      if (fs) { setStat('fs-state', 'locked', 'ok'); overlay.classList.remove('show'); }
+      else { setStat('fs-state', 'exited', 'bad'); overlay.classList.add('show'); Events.log('Full-screen exited', 'bad'); hitIntegrity(10, 'left full-screen'); }
+    }
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    $('fs-return').addEventListener('click', request);
+    return {
+      enable() { on = true; request(); onChange(); Events.log('Full-screen enforcement enabled'); },
+      disable() {
+        on = false;
+        if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+        overlay.classList.remove('show');
+        onChange();
+        Events.log('Full-screen enforcement disabled', 'warn');
+      },
+    };
+  })();
+  $('t-fs').addEventListener('change', e => e.target.checked ? Fullscreen.enable() : Fullscreen.disable());
+
+  /* ----------------------------------------------------------
+     Protection layer: Webcam AI proctoring
+     Uses the experimental FaceDetector when available; otherwise a
+     brightness/motion presence heuristic. Real scoring is server-side.
+     ---------------------------------------------------------- */
+  const Proctor = (function () {
+    const video = $('cam'), badge = $('cam-badge'), wrap = $('cam-wrap');
+    const sample = document.createElement('canvas');
+    sample.width = 160; sample.height = 120;
+    const sctx = sample.getContext('2d', { willReadFrequently: true });
+    let stream = null, raf = 0, last = 0, detector = null, prev = null, lastState = '';
+
+    function set(level, msg) {
+      badge.className = 'cam-badge ' + level;
+      badge.textContent = msg;
+      if (msg !== lastState) {
+        lastState = msg;
+        if (level === 'warn' || level === 'bad') Events.log('Proctor: ' + msg, level);
+      }
+    }
+    function presenceHeuristic() {
+      const data = sctx.getImageData(0, 0, sample.width, sample.height).data;
+      let sum = 0, diff = 0;
+      for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i + 1] + data[i + 2];
+      const mean = sum / (data.length / 4 * 3);
+      if (prev) { for (let i = 0; i < data.length; i += 4) diff += Math.abs(data[i] - prev[i]); diff /= (data.length / 4); }
+      prev = data.slice(0);
+      if (mean < 22) set('bad', 'camera dark / covered');
+      else set('ok', 'monitoring · presence ok');
+    }
+    async function analyze() {
+      try { sctx.drawImage(video, 0, 0, sample.width, sample.height); } catch { return; }
+      if (detector) {
+        try {
+          const faces = await detector.detect(sample);
+          if (faces.length === 0) set('warn', 'no face detected');
+          else if (faces.length > 1) set('bad', faces.length + ' faces — flagged');
+          else set('ok', 'candidate present');
+          return;
+        } catch { /* fall through to heuristic */ }
+      }
+      presenceHeuristic();
+    }
+    function loop(ts) {
+      if (!stream) return;
+      if (!last || ts - last > 700) { last = ts; analyze(); }
+      raf = requestAnimationFrame(loop);
+    }
+    return {
+      async start() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          set('bad', 'camera unavailable'); setStat('proctor-state', 'n/a', 'bad');
+          Events.log('Proctor: getUserMedia not supported in this context', 'bad');
+          return;
+        }
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
+          video.srcObject = stream; await video.play();
+          wrap.classList.add('show');
+          screen.classList.add('cam-on');
+          if ('FaceDetector' in window) { try { detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 5 }); } catch { detector = null; } }
+          setStat('proctor-state', detector ? 'live · faces' : 'live · presence', 'ok');
+          Events.log('Webcam proctoring started' + (detector ? ' (FaceDetector)' : ' (presence heuristic)'), 'ok');
+          last = 0; raf = requestAnimationFrame(loop);
+        } catch (err) {
+          set('bad', 'camera blocked'); setStat('proctor-state', 'denied', 'bad');
+          Events.log('Camera permission denied / blocked: ' + (err && err.name || 'error'), 'bad');
+          $('t-cam').checked = false;
+          screen.classList.remove('cam-on');
+        }
+      },
+      stop() {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        stream = null; video.srcObject = null; detector = null; prev = null; last = 0; lastState = '';
+        cancelAnimationFrame(raf);
+        wrap.classList.remove('show');
+        screen.classList.remove('cam-on');
+        setStat('proctor-state', 'off');
+        Events.log('Webcam proctoring stopped', 'warn');
+      },
+    };
+  })();
+  $('t-cam').addEventListener('change', e => e.target.checked ? Proctor.start() : Proctor.stop());
+
+  /* ----------------------------------------------------------
+     Protection layer: Tab-switch detection
+     ---------------------------------------------------------- */
+  const Tabs = { on: false };
+  function flashToast(msg) {
+    const t = $('tab-toast');
+    t.textContent = '⚠ ' + msg;
+    t.classList.add('show');
+    clearTimeout(t._h);
+    t._h = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (Tabs.on && document.hidden) {
+      state.tabSwitches++;
+      setStat('c-tab', String(state.tabSwitches), state.tabSwitches ? 'bad' : '');
+      Events.log('Tab hidden / switched away', 'bad');
+      hitIntegrity(8, 'tab switch');
+      flashToast('Tab switch detected — logged');
+    }
+  });
+  window.addEventListener('blur', () => { if (Tabs.on) Events.log('Window lost focus', 'warn'); });
+  $('t-tab').addEventListener('change', e => {
+    Tabs.on = e.target.checked;
+    setStat('tab-state', e.target.checked ? 'armed' : 'off', e.target.checked ? 'ok' : '');
+    Events.log('Tab-switch detection ' + (e.target.checked ? 'armed' : 'off'));
+  });
+
+  /* ----------------------------------------------------------
+     Live payload readout
+     ---------------------------------------------------------- */
+  function refreshReadout() {
+    const p = state.payload;
+    const rows = [
+      ['name', p.name], ['id', p.id], ['email', p.email],
+      ['session', p.session], ['exam', p.exam],
+    ];
+    if (state.bindIp) rows.push(['ip', p.ip]);
+    let html = rows.map(([k, v]) =>
+      `<div><span class="k">${k.padEnd(8)}</span> ${escapeHtml(v || '—')}</div>`).join('');
+    html += `<div><span class="k">${'stamp'.padEnd(8)}</span> <span class="stamp" id="stamp-cell"></span></div>`;
+    $('payload-out').innerHTML = html;
+  }
+  function tickStamp() {
+    const cell = $('stamp-cell');
+    if (cell) cell.textContent = new Date().toISOString().replace('T', ' ').slice(0, 19) + 'Z';
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  /* ----------------------------------------------------------
+     Integration snippet
+     ---------------------------------------------------------- */
+  $('snippet').innerHTML =
+`<span class="c">// mount once after login, per session</span>
+<span class="s">const</span> wm = <span class="s">new</span> WatermarkEngine({
+  target: document.body,
+  payload: {
+    name: user.fullName,
+    id: user.candidateId,
+    email: user.email,
+    session: session.id,
+    exam: exam.title,
+    ip: req.clientIp,        <span class="c">// from server</span>
+  },
+  opacity: 0.14,
+  driftSpeed: 1,
+  liveTime: true,
+  tamperGuard: true,
+  ocrPattern: true,
+  sessionPos: true,          <span class="c">// per-session offset</span>
+  posSeed: session.token,    <span class="c">// signed, server-issued</span>
+});
+
+<span class="c">// on submit / unmount</span>
+wm.destroy();`;
+
+  $('copy-btn').addEventListener('click', () => {
+    const txt = $('snippet').textContent;
+    navigator.clipboard?.writeText(txt).then(() => {
+      const b = $('copy-btn'); b.textContent = 'copied'; setTimeout(() => b.textContent = 'copy', 1400);
+    });
+  });
+
+  /* ----------------------------------------------------------
+     Tamper demo
+     ---------------------------------------------------------- */
+  $('tamper-btn').addEventListener('click', () => {
+    const node = screen.querySelector('[data-wm]');
+    if (node) node.remove();   // tamper guard (if on) re-injects within ~1.2s
+    const b = $('tamper-btn');
+    const guarded = $('t-tamper').checked;
+    b.textContent = guarded ? 'Re-injecting…' : 'Layer removed';
+    Events.log(guarded ? 'Tamper attempt — layer re-injected' : 'Tamper attempt — layer removed', guarded ? 'warn' : 'bad');
+    hitIntegrity(guarded ? 5 : 14, 'watermark tamper');
+    setTimeout(() => b.textContent = 'Try to remove layer', 1800);
+  });
+
+  /* ----------------------------------------------------------
+     Phone-photo simulation
+     ---------------------------------------------------------- */
+  let captured = false;
+  $('capture-btn').addEventListener('click', () => {
+    const wrap = $('screen-wrap');
+    captured = !captured;
+    wrap.classList.toggle('captured', captured);
+    screen.classList.toggle('shot', captured);
+    $('capture-btn').textContent = captured ? 'Reset view' : 'Simulate phone photo';
+  });
+
+  // init
+  refreshReadout();
+  renderIntegrity();
+  setInterval(tickStamp, 1000);
+  tickStamp();
+})();
+</script>

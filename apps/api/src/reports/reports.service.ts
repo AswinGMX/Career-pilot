@@ -1,11 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import * as path from "node:path";
 
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { MembershipRole, ProofSessionStatus, ReportStatus, ReportType, type Prisma } from "@prisma/client";
 
 import type {
+  GenerateSchoolReportJobPayload,
+  GenerateStudentReportJobPayload,
   ParentShareSummary,
   ParentSharedReportResponse,
   ProofResult,
@@ -30,6 +30,9 @@ import type {
 
 import { AuthService } from "../auth/auth.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { JOB_NAMES, QUEUE_NAMES } from "../queue/queue.constants";
+import { QueueService } from "../queue/queue.service";
+import { StorageService } from "../storage/storage.service";
 
 type SessionRecord = Prisma.SessionGetPayload<{
   include: {
@@ -80,9 +83,22 @@ const SCHOOL_REPORT_VERSION = "school-report-v1";
 
 @Injectable()
 export class ReportsService {
+  private readonly logger = new Logger(ReportsService.name);
+
+  /**
+   * Grace period after a report is queued before the read path will self-heal
+   * it. Gives a healthy worker first crack; only kicks in when the worker tier
+   * is degraded or absent.
+   */
+  private static readonly REPORT_GRACE_MS = 8_000;
+  /** Report ids with an in-process self-heal already running (dedupes rapid polling). */
+  private readonly reconcilingReports = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly queueService: QueueService,
+    private readonly storageService: StorageService
   ) {}
 
   async getLatestStudentReport(token: string | undefined): Promise<StudentLatestReportResponse> {
@@ -104,11 +120,20 @@ export class ReportsService {
       }
     });
 
+    this.reconcileReport(report, () => this.runStudentReportGeneration(report!.id));
+
     return {
-      report: this.serializeStudentReportRecord(report)
+      report: await this.serializeStudentReportRecord(report)
     };
   }
 
+  /**
+   * Queues student report generation and returns immediately with a `queued`
+   * report. The worker performs generation and uploads the export to object
+   * storage; clients poll `GET /reports/student/latest` until `ready`. If the
+   * queue is unavailable we fall back to inline generation so the user is never
+   * blocked by a degraded worker tier.
+   */
   async generateStudentReport(token: string | undefined): Promise<StudentGenerateReportResponse> {
     const session = await this.requireSession(token);
     const activeTenantMembership = session.user.memberships.find(
@@ -128,51 +153,81 @@ export class ReportsService {
       }
     });
 
+    const enqueued = await this.queueService.enqueue<GenerateStudentReportJobPayload>(
+      QUEUE_NAMES.reports,
+      JOB_NAMES.generateStudentReport,
+      { reportId: report.id, userId: session.user.id },
+      { idempotencyKey: `report:student:${report.id}` }
+    );
+
+    if (!enqueued) {
+      this.logger.warn(`Reports queue unavailable; generating student report ${report.id} inline.`);
+      const generated = await this.runStudentReportGeneration(report.id);
+      return { ok: true, report: (await this.serializeStudentReportRecord(generated))! };
+    }
+
+    return {
+      ok: true,
+      report: (await this.serializeStudentReportRecord(report))!
+    };
+  }
+
+  /**
+   * Performs student report generation: builds the payload, uploads the export
+   * to object storage, and marks the report ready. Invoked by the worker
+   * processor (and inline as a fallback). Idempotent — a report already `ready`
+   * is returned unchanged. On failure the report is marked `failed` and the
+   * error rethrown so the queue retries.
+   */
+  async runStudentReportGeneration(reportId: string): Promise<StudentReportRecordDb> {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: { shares: { orderBy: { createdAt: "desc" } } }
+    });
+
+    if (!report) {
+      throw new NotFoundException(`Report ${reportId} not found.`);
+    }
+    if (report.status === ReportStatus.ready) {
+      return report;
+    }
+
     try {
-      const payload = await this.buildStudentReportPayload(session.user.id);
-      const fileUrl = await this.writeReportExport(report.id, "student", payload);
+      const payload = await this.buildStudentReportPayload(report.userId);
+      const fileKey = `reports/student/${reportId}.json`;
+      await this.storageService.putObject({
+        key: fileKey,
+        body: JSON.stringify(payload),
+        contentType: "application/json"
+      });
+
       const updated = await this.prisma.report.update({
-        where: {
-          id: report.id
-        },
+        where: { id: reportId },
         data: {
           status: ReportStatus.ready,
           reportJson: payload as unknown as Prisma.InputJsonValue,
-          ...(fileUrl ? { fileUrl } : {}),
+          fileKey,
+          fileUrl: null,
           errorMessage: null
         },
-        include: {
-          shares: {
-            orderBy: {
-              createdAt: "desc"
-            }
-          }
-        }
+        include: { shares: { orderBy: { createdAt: "desc" } } }
       });
 
       await this.prisma.auditLog.create({
         data: {
-          actorUserId: session.user.id,
-          tenantId: activeTenantMembership?.tenantId || null,
+          actorUserId: updated.userId,
+          tenantId: updated.tenantId,
           action: "report.student_generated",
           entityType: "report",
           entityId: updated.id,
-          metadata: {
-            reportType: "student",
-            version: STUDENT_REPORT_VERSION
-          }
+          metadata: { reportType: "student", version: updated.version }
         }
       });
 
-      return {
-        ok: true,
-        report: this.serializeStudentReportRecord(updated)!
-      };
+      return updated;
     } catch (error) {
       await this.prisma.report.update({
-        where: {
-          id: report.id
-        },
+        where: { id: reportId },
         data: {
           status: ReportStatus.failed,
           errorMessage: error instanceof Error ? error.message : "Report generation failed."
@@ -296,7 +351,7 @@ export class ReportsService {
 
     return {
       share: this.serializeShare(share, rawToken, share.report.id),
-      report: this.serializeStudentReportRecord(share.report)!
+      report: (await this.serializeStudentReportRecord(share.report))!
     };
   }
 
@@ -313,9 +368,11 @@ export class ReportsService {
       }
     });
 
+    this.reconcileReport(report, () => this.runSchoolReportGeneration(report!.id));
+
     return {
       tenant,
-      report: this.serializeSchoolReportRecord(report)
+      report: await this.serializeSchoolReportRecord(report)
     };
   }
 
@@ -332,45 +389,90 @@ export class ReportsService {
       }
     });
 
+    const enqueued = await this.queueService.enqueue<GenerateSchoolReportJobPayload>(
+      QUEUE_NAMES.reports,
+      JOB_NAMES.generateSchoolReport,
+      { reportId: report.id, tenantId },
+      { idempotencyKey: `report:school:${report.id}` }
+    );
+
+    if (!enqueued) {
+      this.logger.warn(`Reports queue unavailable; generating school report ${report.id} inline.`);
+      const generated = await this.runSchoolReportGeneration(report.id);
+      return { ok: true, tenant, report: (await this.serializeSchoolReportRecord(generated))! };
+    }
+
+    return {
+      ok: true,
+      tenant,
+      report: (await this.serializeSchoolReportRecord(report))!
+    };
+  }
+
+  /**
+   * Performs school report generation. Self-contained (worker-callable) — it
+   * reconstructs the tenant summary from the database rather than a session.
+   * Idempotent and marks `failed` on error so the queue retries.
+   */
+  async runSchoolReportGeneration(reportId: string): Promise<Prisma.ReportGetPayload<object>> {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) {
+      throw new NotFoundException(`Report ${reportId} not found.`);
+    }
+    if (!report.tenantId) {
+      throw new NotFoundException(`Report ${reportId} has no tenant.`);
+    }
+    if (report.status === ReportStatus.ready) {
+      return report;
+    }
+
     try {
-      const payload = await this.buildSchoolReportPayload(tenantId, tenant);
-      const fileUrl = await this.writeReportExport(report.id, "school", payload);
+      const tenantRecord = await this.prisma.tenant.findUnique({ where: { id: report.tenantId } });
+      if (!tenantRecord) {
+        throw new NotFoundException("Tenant not found.");
+      }
+      const tenant: SessionTenantSummary = {
+        id: tenantRecord.id,
+        name: tenantRecord.name,
+        slug: tenantRecord.slug,
+        type: tenantRecord.type,
+        status: tenantRecord.status
+      };
+
+      const payload = await this.buildSchoolReportPayload(report.tenantId, tenant);
+      const fileKey = `reports/school/${reportId}.json`;
+      await this.storageService.putObject({
+        key: fileKey,
+        body: JSON.stringify(payload),
+        contentType: "application/json"
+      });
+
       const updated = await this.prisma.report.update({
-        where: {
-          id: report.id
-        },
+        where: { id: reportId },
         data: {
           status: ReportStatus.ready,
           reportJson: payload as unknown as Prisma.InputJsonValue,
-          ...(fileUrl ? { fileUrl } : {}),
+          fileKey,
+          fileUrl: null,
           errorMessage: null
         }
       });
 
       await this.prisma.auditLog.create({
         data: {
-          actorUserId: session.user.id,
-          tenantId,
+          actorUserId: updated.userId,
+          tenantId: report.tenantId,
           action: "report.school_generated",
           entityType: "report",
           entityId: updated.id,
-          metadata: {
-            reportType: "school",
-            version: SCHOOL_REPORT_VERSION
-          }
+          metadata: { reportType: "school", version: updated.version }
         }
       });
 
-      return {
-        ok: true,
-        tenant,
-        report: this.serializeSchoolReportRecord(updated)!
-      };
+      return updated;
     } catch (error) {
       await this.prisma.report.update({
-        where: {
-          id: report.id
-        },
+        where: { id: reportId },
         data: {
           status: ReportStatus.failed,
           errorMessage: error instanceof Error ? error.message : "Report generation failed."
@@ -724,7 +826,9 @@ export class ReportsService {
     return report;
   }
 
-  private serializeStudentReportRecord(report: StudentReportRecordDb | null | undefined): StudentReportRecord | null {
+  private async serializeStudentReportRecord(
+    report: StudentReportRecordDb | null | undefined
+  ): Promise<StudentReportRecord | null> {
     if (!report) {
       return null;
     }
@@ -734,7 +838,7 @@ export class ReportsService {
       reportType: "student",
       status: report.status,
       version: report.version,
-      fileUrl: report.fileUrl || null,
+      fileUrl: await this.signedFileUrl(report),
       errorMessage: report.errorMessage || null,
       createdAt: report.createdAt.toISOString(),
       updatedAt: report.updatedAt.toISOString(),
@@ -743,9 +847,9 @@ export class ReportsService {
     };
   }
 
-  private serializeSchoolReportRecord(
+  private async serializeSchoolReportRecord(
     report: Prisma.ReportGetPayload<object> | null | undefined
-  ): SchoolReportRecord | null {
+  ): Promise<SchoolReportRecord | null> {
     if (!report) {
       return null;
     }
@@ -755,12 +859,25 @@ export class ReportsService {
       reportType: "school",
       status: report.status,
       version: report.version,
-      fileUrl: report.fileUrl || null,
+      fileUrl: await this.signedFileUrl(report),
       errorMessage: report.errorMessage || null,
       createdAt: report.createdAt.toISOString(),
       updatedAt: report.updatedAt.toISOString(),
       report: this.readSchoolReportPayload(report.reportJson)
     };
+  }
+
+  /**
+   * Returns a fresh, short-lived signed download URL for the report export,
+   * computed on read so it never expires in storage. Falls back to the legacy
+   * `fileUrl` column for any rows generated before object storage.
+   */
+  private async signedFileUrl(report: { fileKey: string | null; fileUrl: string | null }): Promise<string | null> {
+    if (report.fileKey) {
+      const { url } = await this.storageService.createSignedDownload(report.fileKey);
+      return url;
+    }
+    return report.fileUrl || null;
   }
 
   private serializeShare(
@@ -863,6 +980,35 @@ export class ReportsService {
         };
       })
     };
+  }
+
+  /**
+   * Read-path self-heal. If the latest report is still `queued` past the grace
+   * window, the worker tier never processed (or lost) the job. Re-run
+   * generation inline so the client poll is never infinite. The generation
+   * methods are idempotent — they no-op once a report is `ready` — so a healthy
+   * worker finishing concurrently is safe. Fire-and-forget: the GET stays fast
+   * and the next poll observes the result. `failed` reports are left terminal
+   * so a deterministic failure surfaces its error instead of looping forever.
+   */
+  private reconcileReport(
+    report: { id: string; status: ReportStatus; createdAt: Date } | null | undefined,
+    run: () => Promise<unknown>
+  ): void {
+    if (!report || report.status !== ReportStatus.queued) {
+      return;
+    }
+    if (Date.now() - report.createdAt.getTime() < ReportsService.REPORT_GRACE_MS) {
+      return;
+    }
+    if (this.reconcilingReports.has(report.id)) {
+      return;
+    }
+    this.reconcilingReports.add(report.id);
+    this.logger.warn(`Report ${report.id} not produced within grace window; self-healing inline.`);
+    void run()
+      .catch((err) => this.logger.error(`Self-heal report ${report.id} failed: ${(err as Error)?.message}`))
+      .finally(() => this.reconcilingReports.delete(report.id));
   }
 
   private async requireSession(token: string | undefined): Promise<SessionRecord> {
@@ -1097,14 +1243,5 @@ export class ReportsService {
 
   private getAppBaseUrl(): string {
     return process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_BASE_URL || "http://127.0.0.1:3000";
-  }
-
-  private async writeReportExport(reportId: string, kind: "student" | "school", payload: object): Promise<string | null> {
-    if (process.env.NODE_ENV !== "development") return null;
-    const directory = path.resolve(process.cwd(), ".generated-reports");
-    await mkdir(directory, { recursive: true });
-    const filePath = path.join(directory, `${kind}-${reportId}.json`);
-    await writeFile(filePath, JSON.stringify(payload, null, 2), "utf8");
-    return filePath;
   }
 }

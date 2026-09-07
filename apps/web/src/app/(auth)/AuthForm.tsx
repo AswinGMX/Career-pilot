@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import type {
   AuthMeResponse,
@@ -9,6 +10,8 @@ import type {
   RegisterAccountType,
   RegisterPayload
 } from "@career-pilot/types";
+
+import { BuildingIcon, EyeIcon, EyeOffIcon, LockIcon, MailIcon, TagIcon, UserIcon } from "@/components/icons";
 
 function getDefaultAppPath(session: AuthMeResponse["session"]): string {
   if (!session) {
@@ -74,7 +77,10 @@ async function postJson<TResponse>(path: string, payload: unknown): Promise<TRes
   const json = (await response.json()) as TResponse & { message?: string; error?: string };
 
   if (!response.ok) {
-    throw new Error(json.error || json.message || "Request failed.");
+    // NestJS exceptions put the human-readable text in `message` and the HTTP
+    // status name (e.g. "Conflict") in `error` — prefer the message.
+    const message = Array.isArray(json.message) ? json.message.join(", ") : json.message;
+    throw new Error(message || json.error || "Request failed.");
   }
 
   return json as TResponse;
@@ -103,7 +109,8 @@ function LandingField({
   value,
   onChange,
   required,
-  minLength
+  minLength,
+  icon
 }: {
   label: string;
   hint?: string;
@@ -113,6 +120,7 @@ function LandingField({
   onChange: (value: string) => void;
   required?: boolean;
   minLength?: number;
+  icon?: ReactNode;
 }): JSX.Element {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === "password";
@@ -123,7 +131,8 @@ function LandingField({
         {label}
         {hint ? <span className="label-hint"> {hint}</span> : null}
       </label>
-      <div className={isPassword ? "landing-field-input-wrapper" : ""}>
+      <div className="landing-field-input-wrapper">
+        {icon ? <span className="landing-field-icon" aria-hidden>{icon}</span> : null}
         <input
           type={isPassword && showPassword ? "text" : type}
           className="landing-field-input"
@@ -139,8 +148,9 @@ function LandingField({
             className="toggle-password"
             onClick={() => setShowPassword(!showPassword)}
             tabIndex={-1}
+            aria-label={showPassword ? "Hide password" : "Show password"}
           >
-            {showPassword ? "🙈" : "👁"}
+            {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
           </button>
         ) : null}
       </div>
@@ -181,18 +191,26 @@ export function LandingLoginForm(): JSX.Element {
         value={email}
         onChange={setEmail}
         required
+        icon={<MailIcon size={16} />}
       />
       <LandingField
         label="Password"
         type="password"
-        placeholder="Min. 6 characters"
+        placeholder="Enter your password"
         value={password}
         onChange={setPassword}
         required
+        icon={<LockIcon size={16} />}
       />
+      <div className="landing-remember-row">
+        <label className="landing-remember">
+          <input type="checkbox" defaultChecked /> Remember me
+        </label>
+        <a href="/forgot-password">Forgot Password?</a>
+      </div>
       {error ? <p className="landing-error">{error}</p> : null}
       <button type="submit" disabled={isSubmitting} className="landing-btn-primary">
-        {isSubmitting ? "Signing in..." : "Sign In"}
+        {isSubmitting ? "Signing in..." : "Continue →"}
       </button>
     </form>
   );
@@ -203,13 +221,15 @@ export function LandingLoginForm(): JSX.Element {
 const accountTypeLabels: Record<RegisterAccountType, string> = {
   individual: "Solo Student",
   school_admin: "School Admin",
-  school_student: "Join School"
+  school_student: "Join School",
+  mentor: "Mentor"
 };
 
 const accountTypeDescriptions: Record<RegisterAccountType, string> = {
   individual: "Create an independent student account.",
   school_admin: "Create a new school and manage students.",
-  school_student: "Join an existing school with a tenant slug."
+  school_student: "Join an existing school with a tenant slug.",
+  mentor: "Guide students and build them a career plan."
 };
 
 export function LandingRegisterForm(): JSX.Element {
@@ -219,11 +239,13 @@ export function LandingRegisterForm(): JSX.Element {
   const [password, setPassword] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
+  const [headline, setHeadline] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const requiresSchoolName = accountType === "school_admin";
-  const requiresTenantSlug = accountType !== "individual";
+  const requiresTenantSlug = accountType === "school_admin" || accountType === "school_student";
+  const isMentor = accountType === "mentor";
 
   return (
     <form
@@ -238,7 +260,8 @@ export function LandingRegisterForm(): JSX.Element {
           email,
           password,
           schoolName: requiresSchoolName ? schoolName : undefined,
-          tenantSlug: requiresTenantSlug ? tenantSlug : undefined
+          tenantSlug: requiresTenantSlug ? tenantSlug : undefined,
+          headline: isMentor && headline.trim() ? headline.trim() : undefined
         };
 
         try {
@@ -253,7 +276,7 @@ export function LandingRegisterForm(): JSX.Element {
       }}
     >
       <div className="landing-tabs">
-        {(["individual", "school_admin", "school_student"] as RegisterAccountType[]).map((type) => (
+        {(["individual", "school_admin", "school_student", "mentor"] as RegisterAccountType[]).map((type) => (
           <button
             key={type}
             type="button"
@@ -266,7 +289,7 @@ export function LandingRegisterForm(): JSX.Element {
       </div>
       <p className="landing-tab-description">{accountTypeDescriptions[accountType]}</p>
 
-      <LandingField label="Full Name" placeholder="John Doe" value={fullName} onChange={setFullName} required />
+      <LandingField label="Full Name" placeholder="John Doe" value={fullName} onChange={setFullName} required icon={<UserIcon size={16} />} />
       <LandingField
         label="Email Address"
         type="email"
@@ -274,9 +297,10 @@ export function LandingRegisterForm(): JSX.Element {
         value={email}
         onChange={setEmail}
         required
+        icon={<MailIcon size={16} />}
       />
       {requiresSchoolName ? (
-        <LandingField label="School Name" placeholder="e.g. Sunrise Academy" value={schoolName} onChange={setSchoolName} required />
+        <LandingField label="School Name" placeholder="e.g. Sunrise Academy" value={schoolName} onChange={setSchoolName} required icon={<BuildingIcon size={16} />} />
       ) : null}
       {requiresTenantSlug ? (
         <LandingField
@@ -286,6 +310,17 @@ export function LandingRegisterForm(): JSX.Element {
           value={tenantSlug}
           onChange={setTenantSlug}
           required
+          icon={<TagIcon size={16} />}
+        />
+      ) : null}
+      {isMentor ? (
+        <LandingField
+          label="Headline"
+          hint="(mentor)"
+          placeholder="e.g. Senior Data Scientist · mentor"
+          value={headline}
+          onChange={setHeadline}
+          icon={<TagIcon size={16} />}
         />
       ) : null}
       <LandingField
@@ -296,6 +331,7 @@ export function LandingRegisterForm(): JSX.Element {
         onChange={setPassword}
         required
         minLength={8}
+        icon={<LockIcon size={16} />}
       />
 
       {error ? <p className="landing-error">{error}</p> : null}

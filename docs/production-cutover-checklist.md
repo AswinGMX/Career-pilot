@@ -42,6 +42,14 @@ The root-level prototype is not part of the production target.
 ## Operational Readiness
 
 - production env vars are defined in the real secret manager.
+- `TRUST_PROXY` matches the actual topology. **Required behind a load balancer**:
+  the default trusts nothing, so `request.ip` becomes the balancer's address and
+  every user shares one rate-limit bucket. Set the number of proxy hops (`1`
+  behind a single LB) — never `true`, which lets clients spoof their own IP.
+- `STORAGE_SIGNING_SECRET` is set (>= 32 chars) if `STORAGE_DRIVER=local`; the
+  API refuses to boot in production without it.
+- `MICROSOFT_TENANT_ID` is pinned if Microsoft sign-in is enabled, so identities
+  from unrelated tenants cannot reach the app.
 - Gemini key is rotated and not reused from development chat history.
 - database backup is taken before cutover.
 - rollback owner is assigned.

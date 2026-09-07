@@ -1,11 +1,13 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 interface NavItem {
   href: string;
   label: string;
+  icon?: ReactNode;
 }
 
 export function SidebarNav({ items }: { items: NavItem[] }): JSX.Element {
@@ -25,7 +27,12 @@ export function SidebarNav({ items }: { items: NavItem[] }): JSX.Element {
             data-active={isActive}
             aria-current={isActive ? "page" : undefined}
           >
-            {item.label}
+            {item.icon ? (
+              <span className="sidebar-nav-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+            ) : null}
+            <span className="sidebar-nav-text">{item.label}</span>
           </Link>
         );
       })}
