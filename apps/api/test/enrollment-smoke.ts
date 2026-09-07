@@ -1,3 +1,5 @@
+import type { Server } from "node:http";
+
 import type { Redis } from "ioredis";
 
 import assert = require("node:assert/strict");
@@ -15,6 +17,81 @@ import { WorkerModule } from "../src/worker/worker.module";
 import { WorkerRunner } from "../src/worker/worker.runner";
 
 const PROGRAM_SLUG = "software-engineer-reality";
+
+const REFLECTION = "A thoughtful reflection of sufficient length to count.";
+
+const EVIDENCE_MIME: Record<string, string> = {
+  video: "video/mp4",
+  audio: "audio/mpeg",
+  image: "image/png"
+};
+
+/**
+ * A 1x1 PNG. Nothing inspects the payload (AV scanning is off outside
+ * production and no format check runs), it only has to be real bytes the local
+ * storage driver can persist.
+ */
+const EVIDENCE_BYTES = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64"
+);
+
+type DayBlock = {
+  id: string;
+  kind: string;
+  body: Record<string, unknown> | null;
+};
+
+/**
+ * Completes one block the way the UI would. What counts as "completed" depends
+ * on the block kind (see `EnrollmentService.validateBlockCompletion`):
+ * a media task needs evidence uploaded (init -> signed PUT -> complete), a
+ * scenario needs recorded choices, and everything else takes a written
+ * reflection above the minimum length.
+ */
+async function completeBlock(
+  server: Server,
+  cookie: string,
+  enrollmentId: string,
+  block: DayBlock
+): Promise<void> {
+  const declaredKind = typeof block.body?.evidenceKind === "string" ? block.body.evidenceKind : null;
+
+  if (block.kind === "task_prompt" && declaredKind && declaredKind in EVIDENCE_MIME) {
+    const mimeType = EVIDENCE_MIME[declaredKind];
+
+    const init = await request(server)
+      .post(`/v1/enrollments/${enrollmentId}/blocks/${block.id}/evidence`)
+      .set("Cookie", cookie)
+      .send({ mimeType, kind: declaredKind, sizeBytes: EVIDENCE_BYTES.length })
+      .expect(201);
+
+    const upload = init.body.upload as { url: string; headers: Record<string, string> };
+    const target = new URL(upload.url);
+    await request(server)
+      .put(`${target.pathname}${target.search}`)
+      .set({ ...upload.headers, "content-type": mimeType })
+      .send(EVIDENCE_BYTES)
+      .expect(200);
+
+    // completeEvidence routes through markBlockProgress itself, so the block is
+    // completed by this call — do not also post progress for it.
+    await request(server)
+      .post(`/v1/enrollments/${enrollmentId}/blocks/${block.id}/evidence/${init.body.evidenceId}/complete`)
+      .set("Cookie", cookie)
+      .expect(201);
+    return;
+  }
+
+  const interaction =
+    block.kind === "scenario" ? { choices: [{ nodeId: "start", optionId: "a" }] } : { response: REFLECTION };
+
+  await request(server)
+    .post(`/v1/enrollments/${enrollmentId}/blocks/${block.id}/progress`)
+    .set("Cookie", cookie)
+    .send({ state: "completed", interaction })
+    .expect(201);
+}
 
 /**
  * Full Experience Program runtime test: enroll -> walk every day -> program
@@ -73,15 +150,9 @@ async function main(): Promise<void> {
         .set("Cookie", cookie)
         .expect(200);
       assert.ok(dayRes.body.day, `expected day ${dayIndex} to be unlocked`);
-      const blockIds: string[] = dayRes.body.day.modules.flatMap((m: { blocks: { id: string }[] }) =>
-        m.blocks.map((b) => b.id)
-      );
-      for (const blockId of blockIds) {
-        await request(app.getHttpServer())
-          .post(`/v1/enrollments/${enrollmentId}/blocks/${blockId}/progress`)
-          .set("Cookie", cookie)
-          .send({ state: "completed", interaction: { response: "A thoughtful reflection of sufficient length to count." } })
-          .expect(201);
+      const blocks: DayBlock[] = dayRes.body.day.modules.flatMap((m: { blocks: DayBlock[] }) => m.blocks);
+      for (const block of blocks) {
+        await completeBlock(app.getHttpServer(), cookie, enrollmentId, block);
       }
     }
 
