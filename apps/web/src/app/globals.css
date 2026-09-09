@@ -1274,7 +1274,10 @@ a.cta-gradient {
 /* ── Left column ── */
 
 .landing-left {
-  position: relative;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2141,6 +2144,9 @@ a.cta-gradient {
   }
 
   .landing-left {
+    position: static;
+    height: auto;
+    overflow: visible;
     padding: 44px 32px 8px;
   }
 

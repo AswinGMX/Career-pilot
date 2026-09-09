@@ -237,6 +237,7 @@ export function LandingRegisterForm(): JSX.Element {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
   const [headline, setHeadline] = useState("");
@@ -251,8 +252,14 @@ export function LandingRegisterForm(): JSX.Element {
     <form
       onSubmit={async (event) => {
         event.preventDefault();
-        setIsSubmitting(true);
         setError(null);
+
+        if (password !== confirmPassword) {
+          setError("Passwords do not match.");
+          return;
+        }
+
+        setIsSubmitting(true);
 
         const payload: RegisterPayload = {
           accountType,
@@ -329,6 +336,16 @@ export function LandingRegisterForm(): JSX.Element {
         placeholder="Min. 6 characters"
         value={password}
         onChange={setPassword}
+        required
+        minLength={8}
+        icon={<LockIcon size={16} />}
+      />
+      <LandingField
+        label="Confirm Password"
+        type="password"
+        placeholder="Re-enter your password"
+        value={confirmPassword}
+        onChange={setConfirmPassword}
         required
         minLength={8}
         icon={<LockIcon size={16} />}
