@@ -43,18 +43,6 @@ export function ProfileStudio({
                 Profile completed
               </span>
             ) : null}
-            {canToggle ? (
-              <button
-                type="button"
-                className={showForm ? "button-secondary" : "button-primary"}
-                onClick={() => setShowForm((prev) => !prev)}
-              >
-                {showForm ? "Hide form" : "Edit profile"}
-              </button>
-            ) : null}
-            <Link className="button-secondary" href="/student/dashboard">
-              Back to dashboard
-            </Link>
           </>
         }
       />
@@ -63,8 +51,8 @@ export function ProfileStudio({
           initialProfile={initialProfile}
           studentName={studentName}
           initialAssessmentResult={initialAssessmentResult}
-          isEditingControlled={canToggle ? showForm : undefined}
-          onEditingChange={canToggle ? setShowForm : undefined}
+          isEditingControlled={showForm}
+          onEditingChange={setShowForm}
         />
       </div>
     </>

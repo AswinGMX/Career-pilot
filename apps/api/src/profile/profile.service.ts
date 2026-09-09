@@ -77,7 +77,7 @@ export class ProfileService {
       const stored = existing
         ? await tx.studentProfile.update({
             where: { id: existing.id },
-            data: { ...data, assessmentQuestionsJson: Prisma.JsonNull, assessmentResultJson: Prisma.JsonNull }
+            data
           })
         : await tx.studentProfile.create({
             data
@@ -249,7 +249,8 @@ export class ProfileService {
       createdAt: profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
       versionCount: profile.versions.length,
-      cachedAssessmentResult: this.parseAssessmentResult(profile.assessmentResultJson)
+      cachedAssessmentResult: this.parseAssessmentResult(profile.assessmentResultJson),
+      cachedAssessmentQuestions: this.parseAssessmentQuestions(profile.assessmentQuestionsJson)
     };
   }
 
@@ -258,6 +259,13 @@ export class ProfileService {
     const raw = value as Record<string, unknown>;
     if (typeof raw.overallScore !== "number") return null;
     return raw as unknown as import("@career-pilot/types").ProfileAssessmentResult;
+  }
+
+  private parseAssessmentQuestions(value: Prisma.JsonValue | null | undefined): import("@career-pilot/types").ProofQuestionSet | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const raw = value as Record<string, unknown>;
+    if (!Array.isArray(raw.questions) || raw.questions.length === 0) return null;
+    return raw as unknown as import("@career-pilot/types").ProofQuestionSet;
   }
 
   private fromJsonArray(value: Prisma.JsonValue | null): string[] {

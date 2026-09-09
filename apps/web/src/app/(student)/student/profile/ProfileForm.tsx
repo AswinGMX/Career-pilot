@@ -143,7 +143,7 @@ export function ProfileForm({
   const [isGenerating, setIsGenerating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [questionSet, setQuestionSet] = useState<ProofQuestionSet | null>(null);
+  const [questionSet, setQuestionSet] = useState<ProofQuestionSet | null>(initialProfile?.cachedAssessmentQuestions ?? null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [isScoring, setIsScoring] = useState(false);
   const [assessmentResult, setAssessmentResult] = useState<ProfileAssessmentResult | null>(initialAssessmentResult);
@@ -271,36 +271,9 @@ export function ProfileForm({
           placeholder="e.g. Public speaking, rote memorization"
         />
       </div>
-      {initialProfile ? (
-        <div className="status-chip">
-          <strong>Status:</strong> {initialProfile.completionStatus} | <strong>Versions:</strong> {initialProfile.versionCount}
-        </div>
-      ) : null}
       {message ? <p className="status-text--success" style={{ margin: 0 }}>{message}</p> : null}
       {error ? <p className="status-text--error" style={{ margin: 0 }}>{error}</p> : null}
       <div className="button-row">
-        <button
-          type="button"
-          disabled={isSaving}
-          onClick={async () => {
-            setIsSaving(true);
-            setError(null);
-            setMessage(null);
-
-            try {
-              await updateStudentProfile(payload);
-              setMessage("Profile saved.");
-              router.refresh();
-            } catch (caughtError) {
-              setError((caughtError as Error).message);
-            } finally {
-              setIsSaving(false);
-            }
-          }}
-          className="button-primary"
-        >
-          {isSaving ? "Saving..." : "Save profile"}
-        </button>
         <button
           type="button"
           disabled={isSubmitting}
@@ -322,16 +295,16 @@ export function ProfileForm({
           }}
           className="button-secondary"
         >
-          {isSubmitting ? "Submitting..." : "Submit profile"}
+          {isSubmitting ? "Submitting..." : "Save & Submit"}
         </button>
         <button
           type="button"
-          disabled={isGenerating}
+          disabled={isGenerating || Boolean(questionSet)}
           onClick={async () => {
+            if (questionSet) return;
             setIsGenerating(true);
             setError(null);
             setMessage(null);
-            setQuestionSet(null);
             setSelectedAnswers({});
             setAssessmentResult(null);
 
@@ -348,7 +321,7 @@ export function ProfileForm({
           }}
           className="button-primary"
         >
-          {isGenerating ? "Generating..." : "Generate AI Questions"}
+          {isGenerating ? "Generating..." : questionSet ? "Free AI Generation Used (1/1)" : "Generate AI Questions"}
         </button>
       </div>
       {questionSet ? (

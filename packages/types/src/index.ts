@@ -282,6 +282,7 @@ export interface StudentProfile {
   updatedAt: string;
   versionCount: number;
   cachedAssessmentResult: ProfileAssessmentResult | null;
+  cachedAssessmentQuestions?: ProofQuestionSet | null;
 }
 
 export interface StudentProfileResponse {
