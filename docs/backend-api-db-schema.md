@@ -135,7 +135,9 @@ Creates an individual student account or accepts an invitation flow.
 
 ### `POST /v1/auth/login`
 
-Authenticates a user.
+Authenticates a user with `email` and `password`. A login for an unknown email
+verifies a dummy password hash before failing, so response timing does not
+reveal whether an account exists.
 
 ### `POST /v1/auth/refresh`
 
@@ -161,6 +163,39 @@ Returns current session context:
 - role
 - tenant membership
 - permissions
+
+## Account Settings
+
+Self-service management of the caller's own account. Every route acts on the
+session holder and takes no user id, so one account cannot address another.
+
+Credential changes (email, password) are **not exposed** — no route here alters
+a way of signing in. Reintroducing them means re-adding the schema alongside the
+endpoints; nothing dormant is left behind for them.
+
+### `GET /v1/account`
+
+Returns the caller's profile: names, phone, timezone, locale, a signed avatar
+URL, linked OAuth providers, and whether a password is set.
+
+### `GET /v1/account/options`
+
+Timezone and locale suggestions for the pickers. Suggestions only — timezone
+validation accepts any zone the runtime's ICU data knows, including aliases such
+as `Asia/Kolkata`, which `Intl.supportedValuesOf` omits.
+
+### `PATCH /v1/account`
+
+Partial update of `firstName`, `lastName`, `phone`, `timezone`, `locale`. An
+omitted key is unchanged; `null` clears it. `fullName` is recomputed from the
+name parts so existing readers of it stay correct. Phone is normalised to E.164.
+
+### `POST /v1/account/avatar` → signed `PUT` → `POST /v1/account/avatar/:mediaId/complete`
+
+Three-step upload straight to object storage, mirroring the evidence pipeline.
+PNG/JPEG/WebP only (SVG is refused: it is a scriptable document served from an
+app origin), 5MB ceiling, antivirus scan, then magic-byte identification of the
+stored bytes before the image is adopted. `DELETE /v1/account/avatar` removes it.
 
 ## Tenant and Membership Model
 

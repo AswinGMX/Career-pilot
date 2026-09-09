@@ -4,7 +4,7 @@ import { getLatestRecommendations } from "@/lib/api";
 import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
 import { getServerSessionCookieHeader, requireStudent } from "@/lib/session";
 
-import { RecomputeRecommendationsButton } from "./RecomputeRecommendationsButton";
+import { RecomputeRecommendationsButton } from "@/components/recompute-recommendations-button";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,9 @@ export default async function StudentRecommendationsPage(): Promise<JSX.Element>
 
   return (
     <AppPage>
+      <p className="pathfinder-back">
+        <Link href="/student/pathfinder">← Pathfinder</Link>
+      </p>
       <Hero
         eyebrow="Student recommendations"
         title="Career matches with evidence"

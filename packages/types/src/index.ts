@@ -29,6 +29,14 @@ export interface SessionUser {
   id: string;
   email: string;
   fullName: string;
+  firstName: string | null;
+  lastName: string | null;
+  /** Short-lived signed URL, or null when no avatar is set. */
+  avatarUrl: string | null;
+  /** IANA zone; null means "use the viewer's browser zone". */
+  timezone: string | null;
+  /** BCP-47 tag; null means "use the viewer's browser locale". */
+  locale: string | null;
   accountType: UserAccountType;
   status: UserStatus;
   createdAt: string;
@@ -226,6 +234,56 @@ export interface GuidancePlanPayload {
 export interface LoginPayload {
   email: string;
   password: string;
+}
+
+// ── Account settings ───────────────────────────────────────────
+
+/** The account as its owner sees it. Never returned for another user. */
+export interface AccountProfile {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string;
+  phone: string | null;
+  timezone: string | null;
+  locale: string | null;
+  avatarUrl: string | null;
+  accountType: UserAccountType;
+  status: UserStatus;
+  /** Providers linked to this account, e.g. ["google"]. */
+  linkedProviders: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccountResponse {
+  account: AccountProfile;
+}
+
+/** Field-level patch. Omitted keys are left unchanged; null clears a value. */
+export interface UpdateAccountPayload {
+  firstName?: string;
+  lastName?: string;
+  phone?: string | null;
+  timezone?: string | null;
+  locale?: string | null;
+}
+
+export interface AvatarUploadInitPayload {
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export interface AvatarUploadInitResponse {
+  mediaId: string;
+  upload: SignedUploadTarget;
+}
+
+/** Options a client can render for the timezone/locale pickers. */
+export interface AccountOptionsResponse {
+  timezones: string[];
+  locales: string[];
 }
 
 export interface ForgotPasswordPayload {

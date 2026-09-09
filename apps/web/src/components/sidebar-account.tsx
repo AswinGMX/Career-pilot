@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 
 export function SidebarUserCard({
   name,
@@ -49,6 +50,9 @@ export function SidebarUserCard({
       {open ? (
         <div className="sidebar-dropdown">
           <div className="sidebar-dropdown-email">{email}</div>
+          <Link href="/account" className="sidebar-dropdown-item" onClick={() => setOpen(false)}>
+            Account settings
+          </Link>
           <button type="button" className="sidebar-dropdown-item" onClick={handleLogout}>
             Log out
           </button>

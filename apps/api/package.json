@@ -19,7 +19,7 @@
     "start": "node dist/main.js",
     "lint": "node -e \"console.log('api lint placeholder')\"",
     "typecheck": "tsc --noEmit",
-    "test": "ts-node --project tsconfig.json test/storage-smoke.ts && ts-node --project tsconfig.json test/smoke.ts && ts-node --project tsconfig.json test/security-smoke.ts && ts-node --project tsconfig.json test/enrollment-smoke.ts && ts-node --project tsconfig.json test/authoring-smoke.ts && ts-node --project tsconfig.json test/mentor-smoke.ts"
+    "test": "ts-node --project tsconfig.json test/storage-smoke.ts && ts-node --project tsconfig.json test/smoke.ts && ts-node --project tsconfig.json test/security-smoke.ts && ts-node --project tsconfig.json test/account-smoke.ts && ts-node --project tsconfig.json test/enrollment-smoke.ts && ts-node --project tsconfig.json test/authoring-smoke.ts && ts-node --project tsconfig.json test/mentor-smoke.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1066.0",

@@ -43,8 +43,8 @@ function deriveSteps({ profileStatus, recsCount, proofsCompleted, reportReady }:
         "The signals everything else is built on — favourite subjects, activities, curiosity topics, and strengths."
     },
     {
-      href: "/student/recommendations",
-      label: "Recommendations",
+      href: "/student/pathfinder",
+      label: "Pathfinder",
       status: recsCount > 0 ? `${recsCount} match${recsCount === 1 ? "" : "es"}` : "Generate matches",
       description: "AI-ranked career matches with fit scores, derived directly from your profile."
     },

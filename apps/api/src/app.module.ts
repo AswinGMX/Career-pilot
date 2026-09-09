@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
+import { AccountModule } from "./account/account.module";
 import { AiModule } from "./ai/ai.module";
 import { AssessmentsModule } from "./assessments/assessments.module";
 import { AuthModule } from "./auth/auth.module";
@@ -38,6 +39,7 @@ import { MentorsModule } from "./mentors/mentors.module";
     StorageModule,
     HealthModule,
     AuthModule,
+    AccountModule,
     AssessmentsModule,
     TenantsModule,
     ProfileModule,

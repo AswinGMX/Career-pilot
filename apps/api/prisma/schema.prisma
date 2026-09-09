@@ -77,44 +77,56 @@ enum McqSource {
 }
 
 model Tenant {
-  id          String             @id @default(uuid()) @db.Uuid
-  name        String
-  slug        String             @unique
-  type        TenantType         @default(school)
-  status      TenantStatus       @default(active)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  memberships TenantMembership[]
-  auditLogs   AuditLog[]
-  studentProfiles StudentProfile[]
-  proofSessions   ProofSession[]
-  reports         Report[]
+  id                    String             @id @default(uuid()) @db.Uuid
+  name                  String
+  slug                  String             @unique
+  type                  TenantType         @default(school)
+  status                TenantStatus       @default(active)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  memberships           TenantMembership[]
+  auditLogs             AuditLog[]
+  studentProfiles       StudentProfile[]
+  proofSessions         ProofSession[]
+  reports               Report[]
   experienceEnrollments Enrollment[]
 }
 
 model User {
-  id                  String               @id @default(uuid()) @db.Uuid
-  email               String               @unique
-  passwordHash        String?
-  fullName            String
-  accountType         UserAccountType
-  status              UserStatus           @default(active)
-  memberships         TenantMembership[]
-  sessions            Session[]
-  oauthAccounts       OAuthAccount[]
-  passwordResetTokens PasswordResetToken[]
-  auditLogs           AuditLog[]
-  studentProfile      StudentProfile?
+  id                      String                   @id @default(uuid()) @db.Uuid
+  email                   String                   @unique
+  passwordHash            String?
+  /// `fullName` stays the display name and is kept in sync with first/last so
+  /// the many existing readers of it do not have to change.
+  fullName                String
+  firstName               String?
+  lastName                String?
+  /// E.164. Optional — collected for account recovery, never required.
+  phone                   String?
+  /// IANA zone (e.g. Asia/Kolkata). Drives every user-facing timestamp.
+  timezone                String?
+  /// BCP-47 tag (e.g. en-IN). Drives date/number formatting.
+  locale                  String?
+  avatarMediaId           String?                  @db.Uuid
+  avatarMedia             MediaAsset?              @relation("UserAvatar", fields: [avatarMediaId], references: [id], onDelete: SetNull)
+  accountType             UserAccountType
+  status                  UserStatus               @default(active)
+  memberships             TenantMembership[]
+  sessions                Session[]
+  oauthAccounts           OAuthAccount[]
+  passwordResetTokens     PasswordResetToken[]
+  auditLogs               AuditLog[]
+  studentProfile          StudentProfile?
   recommendationSnapshots RecommendationSnapshot[]
-  proofSessions       ProofSession[]
-  reports             Report[]
-  mcqSets             McqSet[]
-  experienceEnrollments Enrollment[]
-  notifications       Notification[]
-  mentorProfile       MentorProfile?
-  mentorRequests      MentorRequest[]      @relation("StudentMentorRequests")
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  proofSessions           ProofSession[]
+  reports                 Report[]
+  mcqSets                 McqSet[]
+  experienceEnrollments   Enrollment[]
+  notifications           Notification[]
+  mentorProfile           MentorProfile?
+  mentorRequests          MentorRequest[]          @relation("StudentMentorRequests")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
 }
 
 enum MentorRequestStatus {
@@ -247,18 +259,18 @@ model PasswordResetToken {
 }
 
 model AuditLog {
-  id           String         @id @default(uuid()) @db.Uuid
-  actorType    AuditActorType @default(user)
-  actorUserId  String?        @db.Uuid
-  tenantId     String?        @db.Uuid
-  action       String
-  entityType   String
-  entityId     String?
-  metadata     Json?
-  ipAddress    String?
-  createdAt    DateTime       @default(now())
-  actorUser    User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-  tenant       Tenant?        @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  id          String         @id @default(uuid()) @db.Uuid
+  actorType   AuditActorType @default(user)
+  actorUserId String?        @db.Uuid
+  tenantId    String?        @db.Uuid
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime       @default(now())
+  actorUser   User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  tenant      Tenant?        @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, createdAt])
   @@index([actorUserId, createdAt])
@@ -274,60 +286,60 @@ model CareerCategory {
 }
 
 model Career {
-  id            String       @id @default(uuid()) @db.Uuid
-  categoryId    String       @db.Uuid
-  slug          String       @unique
-  title         String
-  summary       String
-  status        CareerStatus @default(active)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  category      CareerCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  detail        CareerDetail?
-  proofSessions ProofSession[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  categoryId         String              @db.Uuid
+  slug               String              @unique
+  title              String
+  summary            String
+  status             CareerStatus        @default(active)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  category           CareerCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  detail             CareerDetail?
+  proofSessions      ProofSession[]
   experiencePrograms ExperienceProgram[]
 
   @@index([categoryId, status])
 }
 
 model CareerDetail {
-  id              String   @id @default(uuid()) @db.Uuid
-  careerId        String   @unique @db.Uuid
-  educationPath   Json
-  skills          Json
-  positives       Json
-  challenges      Json
-  drawbacks       Json
-  salaryMeta      Json
-  outlookMeta     Json
-  resilienceMeta  Json
-  updatedAt       DateTime @updatedAt
-  career          Career   @relation(fields: [careerId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid()) @db.Uuid
+  careerId       String   @unique @db.Uuid
+  educationPath  Json
+  skills         Json
+  positives      Json
+  challenges     Json
+  drawbacks      Json
+  salaryMeta     Json
+  outlookMeta    Json
+  resilienceMeta Json
+  updatedAt      DateTime @updatedAt
+  career         Career   @relation(fields: [careerId], references: [id], onDelete: Cascade)
 }
 
 model StudentProfile {
-  id                 String                  @id @default(uuid()) @db.Uuid
-  userId             String                  @unique @db.Uuid
-  tenantId           String?                 @db.Uuid
-  gradeLevel         String?
-  ageBand            String?
-  favoriteSubjects   Json?
-  favoriteActivities Json?
-  topicsCuriousAbout Json?
-  personalStrengths  Json?
-  avoidsOrDislikes   Json?
-  completionStatus       ProfileCompletionStatus @default(draft)
-  submittedAt            DateTime?
+  id                      String                   @id @default(uuid()) @db.Uuid
+  userId                  String                   @unique @db.Uuid
+  tenantId                String?                  @db.Uuid
+  gradeLevel              String?
+  ageBand                 String?
+  favoriteSubjects        Json?
+  favoriteActivities      Json?
+  topicsCuriousAbout      Json?
+  personalStrengths       Json?
+  avoidsOrDislikes        Json?
+  completionStatus        ProfileCompletionStatus  @default(draft)
+  submittedAt             DateTime?
   assessmentQuestionsJson Json?
   assessmentResultJson    Json?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant             Tenant?                 @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  versions           ProfileVersion[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant                  Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  versions                ProfileVersion[]
   recommendationSnapshots RecommendationSnapshot[]
-  proofSessions      ProofSession[]
-  mcqSets            McqSet[]
+  proofSessions           ProofSession[]
+  mcqSets                 McqSet[]
 
   @@index([tenantId])
 }
@@ -390,34 +402,34 @@ model ProofSession {
 }
 
 model Report {
-  id        String       @id @default(uuid()) @db.Uuid
-  userId    String       @db.Uuid
-  tenantId  String?      @db.Uuid
-  reportType ReportType
-  status    ReportStatus @default(queued)
-  version   String
-  reportJson Json?
-  fileUrl   String?
-  fileKey   String?
+  id           String        @id @default(uuid()) @db.Uuid
+  userId       String        @db.Uuid
+  tenantId     String?       @db.Uuid
+  reportType   ReportType
+  status       ReportStatus  @default(queued)
+  version      String
+  reportJson   Json?
+  fileUrl      String?
+  fileKey      String?
   errorMessage String?
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant    Tenant?      @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  shares    ReportShare[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant       Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  shares       ReportShare[]
 
   @@index([userId, reportType, createdAt])
   @@index([tenantId, reportType, createdAt])
 }
 
 model ReportShare {
-  id         String    @id @default(uuid()) @db.Uuid
-  reportId   String    @db.Uuid
-  tokenHash  String
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  report     Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  id        String    @id @default(uuid()) @db.Uuid
+  reportId  String    @db.Uuid
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  report    Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([reportId, createdAt])
   @@index([expiresAt])
@@ -526,19 +538,19 @@ enum MediaStatus {
 }
 
 model ExperienceProgram {
-  id                        String        @id @default(uuid()) @db.Uuid
-  careerId                  String?       @db.Uuid
-  slug                      String        @unique
+  id                        String           @id @default(uuid()) @db.Uuid
+  careerId                  String?          @db.Uuid
+  slug                      String           @unique
   title                     String
   summary                   String
-  status                    ProgramStatus @default(draft)
+  status                    ProgramStatus    @default(draft)
   // Pointer to the published ProgramVersion (kept as a plain id to avoid a
   // circular relation; resolved in the service layer).
-  currentPublishedVersionId String?       @db.Uuid
-  createdByUserId           String?       @db.Uuid
-  createdAt                 DateTime      @default(now())
-  updatedAt                 DateTime      @updatedAt
-  career                    Career?       @relation(fields: [careerId], references: [id], onDelete: SetNull)
+  currentPublishedVersionId String?          @db.Uuid
+  createdByUserId           String?          @db.Uuid
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  career                    Career?          @relation(fields: [careerId], references: [id], onDelete: SetNull)
   versions                  ProgramVersion[]
   enrollments               Enrollment[]
 
@@ -624,10 +636,10 @@ model Rubric {
 }
 
 model MediaAsset {
-  id              String         @id @default(uuid()) @db.Uuid
-  tenantId        String?        @db.Uuid
+  id              String               @id @default(uuid()) @db.Uuid
+  tenantId        String?              @db.Uuid
   kind            MediaKind
-  status          MediaStatus    @default(uploaded)
+  status          MediaStatus          @default(uploaded)
   storageKey      String
   mimeType        String?
   bytes           Int?
@@ -635,11 +647,12 @@ model MediaAsset {
   renditionsJson  Json?
   captionsKey     String?
   licenseJson     Json?
-  createdByUserId String?        @db.Uuid
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdByUserId String?              @db.Uuid
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
   contentBlocks   ContentBlock[]
   evidence        EvidenceSubmission[]
+  avatarOfUsers   User[]               @relation("UserAvatar")
 
   @@index([tenantId, kind])
   @@index([status])
@@ -669,23 +682,23 @@ enum BlockProgressState {
 }
 
 model Enrollment {
-  id               String           @id @default(uuid()) @db.Uuid
-  userId           String           @db.Uuid
-  tenantId         String?          @db.Uuid
-  programId        String           @db.Uuid
-  programVersionId String           @db.Uuid
-  status           EnrollmentStatus @default(active)
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @db.Uuid
+  tenantId         String?              @db.Uuid
+  programId        String               @db.Uuid
+  programVersionId String               @db.Uuid
+  status           EnrollmentStatus     @default(active)
   scheduleJson     Json?
-  currentDayIndex  Int              @default(1)
-  startedAt        DateTime         @default(now())
+  currentDayIndex  Int                  @default(1)
+  startedAt        DateTime             @default(now())
   dueAt            DateTime?
   completedAt      DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant           Tenant?          @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  program          ExperienceProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  programVersion   ProgramVersion   @relation(fields: [programVersionId], references: [id], onDelete: Restrict)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant           Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  program          ExperienceProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  programVersion   ProgramVersion       @relation(fields: [programVersionId], references: [id], onDelete: Restrict)
   dayProgress      DayProgress[]
   blockProgress    BlockProgress[]
   evaluations      EvaluationResult[]

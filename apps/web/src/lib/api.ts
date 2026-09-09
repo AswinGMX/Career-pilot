@@ -1,5 +1,9 @@
 import type {
+  AccountOptionsResponse,
+  AccountResponse,
   AuthMeResponse,
+  AvatarUploadInitResponse,
+  UpdateAccountPayload,
   CareerCategoriesResponse,
   CareerDetailResponse,
   CareerListResponse,
@@ -1182,4 +1186,112 @@ export async function sendMentorMessage(requestId: string, body: string): Promis
     throw new Error(json.error || json.message || "Unable to send message.");
   }
   return json;
+}
+
+// ── Account settings ───────────────────────────────────────────
+
+/**
+ * Single request helper for the account endpoints.
+ *
+ * Unlike the read helpers above, these never swallow a failure into an empty
+ * value: every account call is a user-initiated change, and the server's
+ * message ("Enter the phone number in international format") is the substance of the
+ * interaction, not noise to hide.
+ */
+async function accountRequest<T>(
+  path: string,
+  init: RequestInit & { cookieHeader?: string } = {}
+): Promise<T> {
+  const { cookieHeader, body, ...rest } = init;
+
+  const response = await fetch(`${getApiBaseUrl()}/account${path}`, {
+    cache: "no-store",
+    credentials: "include",
+    ...rest,
+    body,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      ...(rest.headers ?? {})
+    }
+  });
+
+  const text = await response.text();
+  let json: (T & { message?: string | string[]; error?: string }) | null = null;
+
+  if (text) {
+    try {
+      json = JSON.parse(text) as T & { message?: string | string[]; error?: string };
+    } catch {
+      json = null;
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(json, response.status));
+  }
+
+  return json as T;
+}
+
+/**
+ * Nest error bodies carry both a human-readable `message` and a generic `error`
+ * label ("Bad Request"). Read `message` first — it is the reason the user needs
+ * ("That is not a recognised time zone"), while `error` only restates the status
+ * code. Validation failures put an array of reasons in `message`.
+ */
+function readErrorMessage(body: { message?: string | string[]; error?: string } | null, status: number): string {
+  if (Array.isArray(body?.message) && body.message.length > 0) {
+    return body.message.join(" ");
+  }
+
+  if (typeof body?.message === "string" && body.message.trim()) {
+    return body.message;
+  }
+
+  if (body?.error) {
+    return body.error;
+  }
+
+  return `Request failed (${status}).`;
+}
+
+export function getAccount(cookieHeader?: string): Promise<AccountResponse> {
+  return accountRequest<AccountResponse>("", { cookieHeader });
+}
+
+export function getAccountOptions(cookieHeader?: string): Promise<AccountOptionsResponse> {
+  return accountRequest<AccountOptionsResponse>("/options", { cookieHeader });
+}
+
+export function updateAccount(payload: UpdateAccountPayload): Promise<AccountResponse> {
+  return accountRequest<AccountResponse>("", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function deleteAvatar(): Promise<AccountResponse> {
+  return accountRequest<AccountResponse>("/avatar", { method: "DELETE" });
+}
+
+/**
+ * Three-step avatar upload: reserve the object, PUT the bytes straight to
+ * storage, then have the API adopt it. The file never transits the API, which
+ * is what lets the same code path work against S3 in production.
+ */
+export async function uploadAvatar(file: File): Promise<AccountResponse> {
+  const init = await accountRequest<AvatarUploadInitResponse>("/avatar", {
+    method: "POST",
+    body: JSON.stringify({ mimeType: file.type, sizeBytes: file.size })
+  });
+
+  const upload = await fetch(init.upload.url, {
+    method: init.upload.method,
+    headers: init.upload.headers,
+    body: file
+  });
+
+  if (!upload.ok) {
+    throw new Error("Upload failed. Please try again.");
+  }
+
+  return accountRequest<AccountResponse>(`/avatar/${init.mediaId}/complete`, { method: "POST" });
 }

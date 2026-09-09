@@ -47,6 +47,9 @@ export default async function CareersPage({
 
   return (
     <AppPage>
+      <p className="pathfinder-back">
+        <Link href="/student/pathfinder">← Pathfinder</Link>
+      </p>
       <Hero
         eyebrow="Student"
         title="Career catalog"

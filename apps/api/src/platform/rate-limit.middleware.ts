@@ -22,6 +22,8 @@ const RATE_LIMIT_RULES: RateLimitRule[] = [
   // sized for ~30 sign-ins per IP rather than per person.
   { id: "auth-oauth", methods: ["GET"], prefix: "/v1/auth/oauth/", limit: 60, windowMs: 10 * 60_000 },
   { id: "auth-forgot-password", methods: ["POST"], prefix: "/v1/auth/forgot-password", limit: 5, windowMs: 60 * 60_000 },
+  // Avatar uploads hand out signed storage URLs, so they get their own ceiling.
+  { id: "account-avatar", methods: ["POST"], prefix: "/v1/account/avatar", limit: 30, windowMs: 60 * 60_000 },
   { id: "auth-refresh", methods: ["POST"], prefix: "/v1/auth/refresh", limit: 30, windowMs: 60_000 },
   { id: "recommendations-recompute", methods: ["POST"], prefix: "/v1/recommendations/recompute", limit: 10, windowMs: 10 * 60_000 },
   { id: "proof-session-start", methods: ["POST"], prefix: "/v1/assessments/proof-sessions", limit: 20, windowMs: 10 * 60_000 },

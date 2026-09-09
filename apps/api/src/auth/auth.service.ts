@@ -31,6 +31,16 @@ export class OAuthLinkNotVerifiedError extends Error {
     this.name = "OAuthLinkNotVerifiedError";
   }
 }
+/**
+ * A real scrypt hash of random input, compared against when no user matches a
+ * login. Verifying it costs the same as verifying a genuine hash, which is what
+ * keeps "no such account" and "wrong password" indistinguishable by timing.
+ */
+const DUMMY_PASSWORD_HASH = (() => {
+  const salt = randomBytes(16).toString("hex");
+  return `${salt}:${scryptSync(randomBytes(32).toString("hex"), salt, 64).toString("hex")}`;
+})();
+
 const sessionLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const passwordResetLifetimeMs = 60 * 60 * 1000;
 
@@ -202,10 +212,10 @@ export class AuthService {
   }
 
   async login(payload: LoginPayload, userAgent?: string, ipAddress?: string): Promise<{ token: string; session: AuthSessionPayload }> {
+    const email = payload.email.trim().toLowerCase();
+
     const user = await this.prisma.user.findUnique({
-      where: {
-        email: payload.email.trim().toLowerCase()
-      },
+      where: { email },
       include: {
         memberships: {
           include: {
@@ -216,8 +226,16 @@ export class AuthService {
       }
     });
 
-    if (!user || !user.passwordHash || !this.verifyPassword(payload.password, user.passwordHash)) {
-      throw new UnauthorizedException("Invalid email or password.");
+    // Hash a dummy password when no user matched so a missing account and a
+    // wrong password take the same time — otherwise the endpoint becomes an
+    // account-existence oracle.
+    if (!user || !user.passwordHash) {
+      this.verifyPassword(payload.password, DUMMY_PASSWORD_HASH);
+      throw new UnauthorizedException("Invalid credentials.");
+    }
+
+    if (!this.verifyPassword(payload.password, user.passwordHash)) {
+      throw new UnauthorizedException("Invalid credentials.");
     }
 
     const token = this.generateOpaqueToken();
@@ -559,6 +577,14 @@ export class AuthService {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        // Signing needs the media row and storage, which the session query
+        // deliberately does not load — the sidebar reads the avatar from
+        // GET /v1/account instead, keeping every authenticated request cheap.
+        avatarUrl: null,
+        timezone: user.timezone,
+        locale: user.locale,
         accountType: user.accountType,
         status: user.status,
         createdAt: user.createdAt.toISOString(),

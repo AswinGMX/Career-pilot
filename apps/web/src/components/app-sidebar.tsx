@@ -36,6 +36,12 @@ function NavIcon({ name }: { name: string }): JSX.Element {
       </>
     ),
     recommendations: <path d="M12 3.2l2.3 6L20.5 11l-6.2 1.8L12 19l-2.3-6.2L3.5 11l6.2-1.8z" />,
+    pathfinder: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M15.6 8.4 13.8 13.8 8.4 15.6l1.8-5.4z" />
+      </>
+    ),
     programs: (
       <>
         <path d="M12 3.2 3.4 8 12 12.8 20.6 8 12 3.2z" />
@@ -81,8 +87,14 @@ function NavIcon({ name }: { name: string }): JSX.Element {
 const studentNav = [
   { href: "/student/dashboard", label: "Overview", icon: <NavIcon name="overview" /> },
   { href: "/student/profile", label: "Profile Studio", icon: <NavIcon name="profile" /> },
-  { href: "/student/careers", label: "Careers", icon: <NavIcon name="careers" /> },
-  { href: "/student/recommendations", label: "Recommendations", icon: <NavIcon name="recommendations" /> },
+  // Careers + Recommendations merged: one destination that answers both
+  // "what suits me" and "what about this specific career".
+  {
+    href: "/student/pathfinder",
+    label: "Pathfinder",
+    icon: <NavIcon name="pathfinder" />,
+    matchPaths: ["/student/recommendations", "/student/careers"]
+  },
   { href: "/student/programs", label: "Programs", icon: <NavIcon name="programs" /> },
   { href: "/student/proof-sessions", label: "Proof Center", icon: <NavIcon name="proof" /> },
   { href: "/student/mentors", label: "Mentors", icon: <NavIcon name="students" /> },
