@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { ProofSessionRecord } from "@career-pilot/types";
@@ -12,6 +12,16 @@ export function ProofSessionForm({ session }: { session: ProofSessionRecord }): 
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const displayQuestions = useMemo(() => {
+    if (!session?.questionSet?.questions) return [];
+    return session.questionSet.questions.map((question) => ({
+      ...question,
+      shuffledOptions: question.options
+        .map((text, originalIndex) => ({ text, originalIndex }))
+        .sort(() => Math.random() - 0.5)
+    }));
+  }, [session.id]);
 
   const handleSelect = (questionId: string, optionIndex: number) => {
     setAnswers((current) => ({
@@ -46,7 +56,7 @@ export function ProofSessionForm({ session }: { session: ProofSessionRecord }): 
 
   return (
     <section style={{ display: "grid", gap: "18px" }}>
-      {session.questionSet.questions.map((question, index) => (
+      {displayQuestions.map((question, index) => (
         <article key={question.id} style={{ background: "#fff", border: "1px solid #d8e1eb", borderRadius: "14px", padding: "18px" }}>
           <p style={{ margin: 0, fontSize: "12px", color: "#4b6480", textTransform: "uppercase" }}>
             Question {index + 1} • {question.dimension}
@@ -54,14 +64,14 @@ export function ProofSessionForm({ session }: { session: ProofSessionRecord }): 
           <h2 style={{ margin: "10px 0 8px", fontSize: "22px" }}>{question.question}</h2>
           <p style={{ margin: 0, color: "#4b6480" }}>{question.whyItMatters}</p>
           <div style={{ marginTop: "16px", display: "grid", gap: "10px" }}>
-            {question.options.map((option, optionIndex) => {
-              const selected = answers[question.id] === optionIndex;
+            {question.shuffledOptions.map(({ text, originalIndex }) => {
+              const selected = answers[question.id] === originalIndex;
 
               return (
                 <button
-                  key={option}
+                  key={originalIndex}
                   type="button"
-                  onClick={() => handleSelect(question.id, optionIndex)}
+                  onClick={() => handleSelect(question.id, originalIndex)}
                   style={{
                     textAlign: "left",
                     padding: "12px 14px",
@@ -71,7 +81,7 @@ export function ProofSessionForm({ session }: { session: ProofSessionRecord }): 
                     cursor: "pointer"
                   }}
                 >
-                  {option}
+                  {text}
                 </button>
               );
             })}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { ProfileAssessmentResult, ProfileUpdatePayload, ProofQuestionSet, StudentProfile } from "@career-pilot/types";
 
@@ -159,6 +159,16 @@ export function ProfileForm({
     onEditingChange?.(next);
   };
 
+  const displayQuestions = useMemo(() => {
+    if (!questionSet) return [];
+    return questionSet.questions.map((question) => ({
+      ...question,
+      shuffledOptions: question.options
+        .map((text, originalIndex) => ({ text, originalIndex }))
+        .sort(() => Math.random() - 0.5)
+    }));
+  }, [questionSet]);
+
   const payload: ProfileUpdatePayload = {
     gradeLevel,
     ageBand,
@@ -197,7 +207,7 @@ export function ProfileForm({
       {assessmentResult ? (
         <CharacterProfileView
           result={assessmentResult}
-          onEdit={() => {}}
+          onEdit={() => { }}
         />
       ) : null}
       <div className="profile-field-row profile-field-row--lead">
@@ -328,7 +338,7 @@ export function ProfileForm({
         <div className="question-set">
           <p className="question-set__intro">{questionSet.introduction}</p>
           <ol className="question-set__list">
-            {questionSet.questions.map((question, index) => (
+            {displayQuestions.map((question, index) => (
               <li key={question.id} className="question-set__item">
                 <div className="question-set__header">
                   <span className="question-set__number">{index + 1}.</span>
@@ -337,13 +347,13 @@ export function ProfileForm({
                 <p className="question-set__text">{question.question}</p>
                 <p className="question-set__why">{question.whyItMatters}</p>
                 <ul className="question-set__options">
-                  {question.options.map((option, optionIndex) => (
+                  {question.shuffledOptions.map(({ text, originalIndex }) => (
                     <li
-                      key={optionIndex}
-                      className={`question-set__option${selectedAnswers[question.id] === optionIndex ? " question-set__option--selected" : ""}`}
-                      onClick={() => setSelectedAnswers((prev) => ({ ...prev, [question.id]: optionIndex }))}
+                      key={originalIndex}
+                      className={`question-set__option${selectedAnswers[question.id] === originalIndex ? " question-set__option--selected" : ""}`}
+                      onClick={() => setSelectedAnswers((prev) => ({ ...prev, [question.id]: originalIndex }))}
                     >
-                      {option}
+                      {text}
                     </li>
                   ))}
                 </ul>
