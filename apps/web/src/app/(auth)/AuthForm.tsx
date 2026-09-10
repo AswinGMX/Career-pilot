@@ -8,10 +8,26 @@ import type {
   ForgotPasswordPayload,
   PasswordResetResponse,
   RegisterAccountType,
-  RegisterPayload
+  RegisterPayload,
+  SendOtpPayload,
+  SendOtpResponse,
+  VerifyOtpPayload,
+  VerifyOtpResponse
 } from "@career-pilot/types";
 
-import { BuildingIcon, EyeIcon, EyeOffIcon, LockIcon, MailIcon, TagIcon, UserIcon } from "@/components/icons";
+import {
+  BuildingIcon,
+  CheckCircleIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LockIcon,
+  MailIcon,
+  TagIcon,
+  UserIcon,
+  XCircleIcon
+} from "@/components/icons";
+
+const OTP_RESEND_COOLDOWN_SECONDS = 45;
 
 function getDefaultAppPath(session: AuthMeResponse["session"]): string {
   if (!session) {
@@ -244,9 +260,85 @@ export function LandingRegisterForm(): JSX.Element {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [otpCode, setOtpCode] = useState("");
+  const [otpEmail, setOtpEmail] = useState<string | null>(null);
+  const [otpStatus, setOtpStatus] = useState<"idle" | "sent" | "verified" | "invalid">("idle");
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   const requiresSchoolName = accountType === "school_admin";
   const requiresTenantSlug = accountType === "school_admin" || accountType === "school_student";
   const isMentor = accountType === "mentor";
+  const otpSent = otpStatus !== "idle";
+
+  const handleEmailChange = (value: string): void => {
+    setEmail(value);
+    if (value !== otpEmail) {
+      setOtpStatus("idle");
+      setOtpCode("");
+      setOtpMessage(null);
+    }
+  };
+
+  const startResendCooldown = (): void => {
+    setResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+    const intervalId = window.setInterval(() => {
+      setResendCooldown((remaining) => {
+        if (remaining <= 1) {
+          window.clearInterval(intervalId);
+          return 0;
+        }
+        return remaining - 1;
+      });
+    }, 1000);
+  };
+
+  const handleSendOtp = async (): Promise<void> => {
+    if (!email) {
+      return;
+    }
+
+    setIsSendingOtp(true);
+    setOtpMessage(null);
+
+    try {
+      const response = await postJson<SendOtpResponse>("/auth/otp/send", { email } satisfies SendOtpPayload);
+      setOtpEmail(email);
+      setOtpStatus("sent");
+      setOtpCode("");
+      setOtpMessage(response.devCode ? `${response.message} (dev code: ${response.devCode})` : response.message);
+      startResendCooldown();
+    } catch (caughtError) {
+      setOtpMessage((caughtError as Error).message);
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async (): Promise<void> => {
+    if (!otpEmail || otpCode.length !== 6) {
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpMessage(null);
+
+    try {
+      const response = await postJson<VerifyOtpResponse>("/auth/otp/verify", {
+        email: otpEmail,
+        code: otpCode
+      } satisfies VerifyOtpPayload);
+      setOtpStatus("verified");
+      setOtpMessage(response.message);
+    } catch (caughtError) {
+      setOtpStatus("invalid");
+      setOtpMessage((caughtError as Error).message);
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
 
   return (
     <form
@@ -256,6 +348,11 @@ export function LandingRegisterForm(): JSX.Element {
 
         if (password !== confirmPassword) {
           setError("Passwords do not match.");
+          return;
+        }
+
+        if (otpStatus !== "verified" || otpEmail !== email) {
+          setError("Please verify your email address with the OTP sent to your inbox before creating an account.");
           return;
         }
 
@@ -302,10 +399,86 @@ export function LandingRegisterForm(): JSX.Element {
         type="email"
         placeholder="you@example.com"
         value={email}
-        onChange={setEmail}
+        onChange={handleEmailChange}
         required
         icon={<MailIcon size={16} />}
       />
+
+      <div className="landing-field">
+        <label className="landing-field-label">
+          Email Verification Code
+          <span className="label-hint"> (required)</span>
+        </label>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div className="landing-field-input-wrapper" style={{ flex: 1 }}>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              className="landing-field-input"
+              placeholder="6-digit code"
+              value={otpCode}
+              onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              required
+              disabled={otpStatus === "verified"}
+            />
+          </div>
+          {otpStatus === "verified" ? (
+            <span style={{ color: "#16a34a", display: "flex" }} aria-label="Email verified">
+              <CheckCircleIcon size={24} />
+            </span>
+          ) : otpStatus === "invalid" ? (
+            <span style={{ color: "#dc2626", display: "flex" }} aria-label="Invalid code">
+              <XCircleIcon size={24} />
+            </span>
+          ) : null}
+        </div>
+        <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+          <button
+            type="button"
+            className="landing-btn-outline"
+            style={{
+              width: "auto",
+              flex: 1,
+              minHeight: "40px",
+              fontSize: "12px",
+              opacity: !email || isSendingOtp || resendCooldown > 0 || otpStatus === "verified" ? 0.55 : 1
+            }}
+            disabled={!email || isSendingOtp || resendCooldown > 0 || otpStatus === "verified"}
+            onClick={handleSendOtp}
+          >
+            {isSendingOtp
+              ? "Sending..."
+              : resendCooldown > 0
+                ? `Resend in ${resendCooldown}s`
+                : otpSent
+                  ? "Resend OTP"
+                  : "Generate OTP"}
+          </button>
+          <button
+            type="button"
+            className="landing-btn-outline"
+            style={{
+              width: "auto",
+              flex: 1,
+              minHeight: "40px",
+              fontSize: "12px",
+              opacity: !otpSent || otpCode.length !== 6 || isVerifyingOtp || otpStatus === "verified" ? 0.55 : 1
+            }}
+            disabled={!otpSent || otpCode.length !== 6 || isVerifyingOtp || otpStatus === "verified"}
+            onClick={handleVerifyOtp}
+          >
+            {isVerifyingOtp ? "Validating..." : "Validate"}
+          </button>
+        </div>
+        {otpMessage ? (
+          <p className={otpStatus === "invalid" ? "landing-error" : "landing-success"} style={{ marginTop: "8px" }}>
+            {otpMessage}
+          </p>
+        ) : null}
+      </div>
+
       {requiresSchoolName ? (
         <LandingField label="School Name" placeholder="e.g. Sunrise Academy" value={schoolName} onChange={setSchoolName} required icon={<BuildingIcon size={16} />} />
       ) : null}
@@ -352,7 +525,11 @@ export function LandingRegisterForm(): JSX.Element {
       />
 
       {error ? <p className="landing-error">{error}</p> : null}
-      <button type="submit" disabled={isSubmitting} className="landing-btn-primary">
+      <button
+        type="submit"
+        disabled={isSubmitting || otpStatus !== "verified" || otpEmail !== email}
+        className="landing-btn-primary"
+      >
         {isSubmitting ? "Creating account..." : "Create Account"}
       </button>
     </form>

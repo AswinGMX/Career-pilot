@@ -66,7 +66,7 @@ export class RecommendationsService {
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
     private readonly llmService: LlmService
-  ) {}
+  ) { }
 
   async getLatest(token: string | undefined): Promise<RecommendationLatestResponse> {
     const session = await this.requireStudentSession(token);
@@ -359,6 +359,7 @@ export class RecommendationsService {
     profile: ProfileRecord,
     baseItems: RecommendationItem[]
   ): Promise<{ items: RecommendationItem[]; engineVersion: string }> {
+    console.log(this.llmService.isConfigured, 'test');
     if (!this.llmService.isConfigured()) {
       return {
         items: baseItems.slice(0, 5),
@@ -409,9 +410,6 @@ export class RecommendationsService {
       items: Array<{
         careerSlug: string;
         fitScore: number;
-        explanation: string;
-        reasons: string[];
-        evidenceInputs: string[];
       }>;
     }>({
       systemInstruction:
@@ -427,12 +425,8 @@ export class RecommendationsService {
             careerSlug: item.career.slug,
             careerTitle: item.career.title,
             category: item.career.category.name,
-            summary: item.career.summary,
             draftFitScore: item.fitScore,
             skills: item.career.skills,
-            positives: item.career.positives,
-            challenges: item.career.challenges,
-            draftReasons: item.reasons
           }))
         )}`
       ].join("\n"),
@@ -462,9 +456,6 @@ export class RecommendationsService {
           fitScore: Math.max(1, Math.min(99, Math.round(item.fitScore))),
           fitLabel:
             item.fitScore >= 78 ? "high" : item.fitScore >= 60 ? "medium" : "emerging",
-          explanation: item.explanation,
-          reasons: item.reasons.slice(0, 4),
-          evidenceInputs: item.evidenceInputs.slice(0, 6),
           engineVersion: "gemini-v1"
         } satisfies RecommendationItem;
       })
@@ -473,13 +464,13 @@ export class RecommendationsService {
 
     return refinedItems.length
       ? {
-          items: refinedItems,
-          engineVersion: "gemini-v1"
-        }
+        items: refinedItems,
+        engineVersion: "gemini-v1"
+      }
       : {
-          items: baseItems.slice(0, 5),
-          engineVersion: fallbackRecommendationEngineVersion
-        };
+        items: baseItems.slice(0, 5),
+        engineVersion: fallbackRecommendationEngineVersion
+      };
   }
 
   private serializeSnapshot(snapshot: RecommendationSnapshotModel): RecommendationSnapshot {

@@ -77,7 +77,7 @@ export class AssessmentsService {
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
     private readonly llmService: LlmService
-  ) {}
+  ) { }
 
   async startProofSession(token: string | undefined, careerSlug: string): Promise<ProofSessionResponse> {
     const session = await this.requireStudentSession(token);
@@ -476,9 +476,9 @@ Return JSON: {"narrative":"2-3 sentences about ${session.user.fullName} mentioni
       systemInstruction: "You generate behavioral assessment questions for students. Return only valid JSON.",
       prompt: `Generate ${proofQuestionCount} behavioral questions for a grade ${profile.gradeLevel || "unknown"} student (age ${profile.ageBand || "unknown"}).
 Profile: likes ${subjects || "various subjects"}, enjoys ${activities || "various activities"}, curious about ${curious || "many things"}, strengths: ${strengths || "developing"}, avoids: ${dislikes || "nothing specific"}.
-Each question tests mindset, behavior, or emotional readiness — not trivia. 4 options each, ordered least to most ready.
+Each question tests mindset, behavior, or emotional readiness — not trivia. 4 options each ,all looks similar but should test the user mindset..
 
-Return JSON: {"source":"gemini","introduction":"...","questions":[{"id":"q1","dimension":"one word like discipline","question":"...","whyItMatters":"...","options":["least ready","...","...","most ready"]}]}
+Return JSON: {"source":"gemini","introduction":"...","questions":[{"id":"q1","dimension":"one word like discipline","question":"...","whyItMatters":"...","options":["looks similar","...","...","test the user mindset"]}]}
 Exactly ${proofQuestionCount} questions.`,
       schema: {},
       temperature: 0.8
@@ -651,7 +651,7 @@ Exactly ${proofQuestionCount} questions.`,
         `Generate ${proofQuestionCount} tricky but student-safe proof questions for a career.`,
         "The student does not know the field technically, so do not ask factual or academic trivia.",
         "Each question must test capability, behavior, mindset, emotional readiness, or lifestyle fit.",
-        "Every question must have exactly 4 answer options ordered from least ready to most ready.",
+        "Every question must have exactly 4 answer options ,all looks similar but should test the user mindset.",
         `Career context: ${JSON.stringify({
           title: career.title,
           category: career.category.name,
@@ -770,15 +770,15 @@ Exactly ${proofQuestionCount} questions.`,
 
     return aiResponse
       ? {
-          ...fallback,
-          source: "gemini",
-          narrative: aiResponse.narrative,
-          parentSummary: aiResponse.parentSummary,
-          schoolSummary: aiResponse.schoolSummary,
-          strengths: aiResponse.strengths.slice(0, 3),
-          risks: aiResponse.risks.slice(0, 3),
-          nextSteps: aiResponse.nextSteps.slice(0, 3)
-        }
+        ...fallback,
+        source: "gemini",
+        narrative: aiResponse.narrative,
+        parentSummary: aiResponse.parentSummary,
+        schoolSummary: aiResponse.schoolSummary,
+        strengths: aiResponse.strengths.slice(0, 3),
+        risks: aiResponse.risks.slice(0, 3),
+        nextSteps: aiResponse.nextSteps.slice(0, 3)
+      }
       : fallback;
   }
 
@@ -874,17 +874,17 @@ Exactly ${proofQuestionCount} questions.`,
           : "Resilience matters when results are delayed and motivation is tested.",
         options: isHighDisciplineCareer
           ? [
-              "I would shut down quickly and want to quit.",
-              "I could push a little, but not for long.",
-              "I could stay steady with recovery and support.",
-              "I can keep performing even when the work becomes very demanding."
-            ]
+            "I would shut down quickly and want to quit.",
+            "I could push a little, but not for long.",
+            "I could stay steady with recovery and support.",
+            "I can keep performing even when the work becomes very demanding."
+          ]
           : [
-              "I would lose confidence and stop trying.",
-              "I would doubt myself for a while and slow down.",
-              "I would reflect, recover, and try again.",
-              "I would use the setback as feedback and come back stronger."
-            ]
+            "I would lose confidence and stop trying.",
+            "I would doubt myself for a while and slow down.",
+            "I would reflect, recover, and try again.",
+            "I would use the setback as feedback and come back stronger."
+          ]
       }
     ];
 

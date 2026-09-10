@@ -144,6 +144,27 @@ export const EyeOffIcon = (p: IconProps): JSX.Element => (
   </S>
 );
 
+export const CheckCircleIcon = (p: IconProps): JSX.Element => (
+  <S {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8 12.5l2.5 2.5L16 9.5" />
+  </S>
+);
+
+export const XCircleIcon = (p: IconProps): JSX.Element => (
+  <S {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9 9l6 6M15 9l-6 6" />
+  </S>
+);
+
+export const SearchIcon = (p: IconProps): JSX.Element => (
+  <S {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M21 21l-4.3-4.3" />
+  </S>
+);
+
 export const BrainIcon = (p: IconProps): JSX.Element => (
   <S {...p}>
     <path d="M9 4a2.5 2.5 0 0 0-2.5 2.5A2.5 2.5 0 0 0 4 9c0 1 .5 1.8 1.2 2.3A2.6 2.6 0 0 0 5 13a2.5 2.5 0 0 0 2 2.45V18a2 2 0 0 0 2 2V4z" />

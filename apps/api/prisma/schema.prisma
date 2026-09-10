@@ -258,6 +258,19 @@ model PasswordResetToken {
   @@index([userId, expiresAt])
 }
 
+model EmailOtp {
+  id         String    @id @default(uuid()) @db.Uuid
+  email      String
+  purpose    String    @default("signup")
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, purpose, createdAt])
+}
+
 model AuditLog {
   id          String         @id @default(uuid()) @db.Uuid
   actorType   AuditActorType @default(user)

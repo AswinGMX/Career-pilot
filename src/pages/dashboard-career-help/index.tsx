@@ -66,7 +66,7 @@ export default function DashboardCareerHelpPage(): JSX.Element {
       </Card>
 
       <section className="career-help-center">
-        {isMentorPath ? (
+        {isMentorPath ?? (
           <div className="career-help-logo-grid">
             <article className="career-help-logo-card">
               <div className="career-help-logo-mark career-help-logo-mark--mentor">M</div>
@@ -87,41 +87,8 @@ export default function DashboardCareerHelpPage(): JSX.Element {
               </p>
             </article>
           </div>
-        ) : isBelowPar ? (
-          <div className="career-help-logo-grid">
-            <a className="career-help-logo-card" href="https://digri.ai/" rel="noreferrer" target="_blank">
-              <img
-                alt="Digri"
-                className="career-help-logo-image"
-                src="https://digri.ai/wp-content/uploads/2023/08/digri-favicon-1.png"
-              />
-              <strong>Digri</strong>
-              <p>Upskill your technology foundation.</p>
-            </a>
-            <a className="career-help-logo-card" href="https://www.veril.ai/" rel="noreferrer" target="_blank">
-              <img alt="Veril AI" className="career-help-logo-image" src="https://www.veril.ai/logo.png" />
-              <strong>Veril AI</strong>
-              <p>Verify skills and strengthen resume proof.</p>
-            </a>
-          </div>
-        ) : isTechnology ? (
-          <div className="career-help-logo-grid">
-            <a className="career-help-logo-card" href="https://digri.ai/" rel="noreferrer" target="_blank">
-              <img
-                alt="Digri"
-                className="career-help-logo-image"
-                src="https://digri.ai/wp-content/uploads/2023/08/digri-favicon-1.png"
-              />
-              <strong>Digri</strong>
-              <p>Level up and stay sharp for technology roles.</p>
-            </a>
-            <a className="career-help-logo-card" href="https://www.veril.ai/" rel="noreferrer" target="_blank">
-              <img alt="Veril AI" className="career-help-logo-image" src="https://www.veril.ai/logo.png" />
-              <strong>Veril AI</strong>
-              <p>Show verified skill proof before placement outreach.</p>
-            </a>
-          </div>
-        ) : null}
+        )
+        }
       </section>
 
       <div className="actions career-help-actions">

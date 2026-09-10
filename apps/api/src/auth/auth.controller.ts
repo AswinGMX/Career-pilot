@@ -15,10 +15,16 @@ import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { SendOtpDto } from "./dto/send-otp.dto";
+import { VerifyOtpDto } from "./dto/verify-otp.dto";
+import { OtpService } from "./otp.service";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly otpService: OtpService
+  ) {
     this.getMe = this.getMe.bind(this);
     this.register = this.register.bind(this);
     this.login = this.login.bind(this);
@@ -26,6 +32,8 @@ export class AuthController {
     this.logout = this.logout.bind(this);
     this.forgotPassword = this.forgotPassword.bind(this);
     this.resetPassword = this.resetPassword.bind(this);
+    this.sendOtp = this.sendOtp.bind(this);
+    this.verifyOtp = this.verifyOtp.bind(this);
   }
 
   @Get("me")
@@ -103,5 +111,15 @@ export class AuthController {
   @Post("reset-password")
   async resetPassword(@Body() body: ResetPasswordDto): Promise<ReturnType<AuthService["resetPassword"]>> {
     return this.authService.resetPassword(body as ResetPasswordPayload);
+  }
+
+  @Post("otp/send")
+  async sendOtp(@Body() body: SendOtpDto): Promise<ReturnType<OtpService["sendSignupOtp"]>> {
+    return this.otpService.sendSignupOtp(body.email);
+  }
+
+  @Post("otp/verify")
+  async verifyOtp(@Body() body: VerifyOtpDto): Promise<ReturnType<OtpService["verifySignupOtp"]>> {
+    return this.otpService.verifySignupOtp(body.email, body.code);
   }
 }

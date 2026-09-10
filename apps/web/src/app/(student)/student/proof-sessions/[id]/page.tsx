@@ -83,12 +83,6 @@ export default async function ProofSessionDetailPage({ params }: { params: { id:
               </SurfaceCard>
             </div>
 
-            <CareerHelpSection
-              categoryName={session.career.name}
-              careerTitle={session.career.title}
-              overallScore={session.result.overallScore}
-            />
-
             <article className="next-step-banner">
               <div className="next-step-banner__text">
                 <h3 className="next-step-banner__title">
@@ -189,95 +183,5 @@ function DimensionScores({ scores }: { scores: Record<string, number> }): JSX.El
         );
       })}
     </div>
-  );
-}
-
-function CareerHelpSection({
-  categoryName,
-  careerTitle,
-  overallScore
-}: {
-  categoryName: string;
-  careerTitle: string;
-  overallScore: number;
-}): JSX.Element {
-  const isTechnology = categoryName.trim().toLowerCase() === "technology";
-  const isMentorPath = !isTechnology;
-  const isBelowPar = overallScore < 65;
-
-  const headline = isMentorPath
-    ? isBelowPar
-      ? `Next step: rebuild your ${careerTitle} path with mentor guidance`
-      : `Next step: move forward in ${careerTitle} with an in-person mentor`
-    : isBelowPar
-      ? `We can strengthen your path toward ${careerTitle}`
-      : `Next step: turn your ${careerTitle} momentum into placements`;
-
-  const summary = isMentorPath
-    ? isBelowPar
-      ? "This path needs real-world guidance first. Work with a mentor, build discipline in live settings, and then return with stronger proof."
-      : "This path grows faster through in-person guidance, field exposure, and someone experienced helping you take the next right step."
-    : isBelowPar
-      ? "This is the support layer. Start by building stronger real-world signals, then come back with better proof."
-      : "This is the acceleration layer. Build verified signals and sharper visibility before targeting top companies.";
-
-  return (
-    <article className="career-help-card">
-      <p className="career-help-card__eyebrow">Career help</p>
-      <h2 className="career-help-card__title">{headline}</h2>
-      <p className="career-help-card__summary">{summary}</p>
-      <div className="career-help-card__pills">
-        <span className={`career-help-pill ${isBelowPar ? "career-help-pill--danger" : "career-help-pill--success"}`}>
-          {isBelowPar ? "Keep building" : "Current score"} · {overallScore}%
-        </span>
-        <span className="career-help-pill">{isMentorPath ? "Mentor pathway unlocked" : "Technology pathway unlocked"}</span>
-      </div>
-
-      {isMentorPath ? (
-        <div className="career-help-grid">
-          <article className="career-help-partner career-help-partner--mentor">
-            <div className="career-help-mark career-help-mark--mentor">M</div>
-            <strong>In-person mentor</strong>
-            <span>
-              {isBelowPar
-                ? `You need a mentor who can guide your next ${careerTitle} step in a realistic environment.`
-                : `The best next move is an in-person mentor who can guide your growth in ${careerTitle}.`}
-            </span>
-          </article>
-          <article className="career-help-partner career-help-partner--mentor">
-            <div className="career-help-mark career-help-mark--field">R</div>
-            <strong>Real-world exposure</strong>
-            <span>
-              {isBelowPar
-                ? "Shadow the role, observe the work reality, and build readiness before the next proof attempt."
-                : "Use shadowing, live observation, and guided practice to convert readiness into consistent action."}
-            </span>
-          </article>
-        </div>
-      ) : (
-        <div className="career-help-grid">
-          <a className="career-help-partner" href="https://digri.ai/" rel="noreferrer" target="_blank">
-            <img
-              alt="Digri"
-              className="career-help-partner__image"
-              src="https://digri.ai/wp-content/uploads/2023/08/digri-favicon-1.png"
-            />
-            <strong>Digri</strong>
-            <span>
-              {isBelowPar ? "Upskill your technology foundation." : "Level up and stay sharp for technology roles."}
-            </span>
-          </a>
-          <a className="career-help-partner" href="https://www.veril.ai/" rel="noreferrer" target="_blank">
-            <img alt="Veril AI" className="career-help-partner__image" src="https://www.veril.ai/logo.png" />
-            <strong>Veril AI</strong>
-            <span>
-              {isBelowPar
-                ? "Verify skills and strengthen resume proof."
-                : "Show verified skill proof before placement outreach."}
-            </span>
-          </a>
-        </div>
-      )}
-    </article>
   );
 }

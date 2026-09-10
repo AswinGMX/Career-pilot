@@ -4,6 +4,8 @@ import { getCareerCategories, getCareers, getLatestRecommendations } from "@/lib
 import { AppPage, Hero, SurfaceCard } from "@/components/page-chrome";
 import { getServerSessionCookieHeader, requireStudent } from "@/lib/session";
 
+import { CareerSearchForm } from "./CareerSearchForm";
+
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 24;
@@ -47,7 +49,7 @@ export default async function CareersPage({
 
   return (
     <AppPage>
-      <p className="pathfinder-back">
+      <p className="pathfinder-back" style={{ marginBottom: '1rem' }}>
         <Link href="/student/pathfinder">← Pathfinder</Link>
       </p>
       <Hero
@@ -62,31 +64,7 @@ export default async function CareersPage({
       />
 
       <div className="section-stack">
-        <form method="GET" className="surface-card" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <input
-            name="q"
-            defaultValue={query}
-            placeholder="Search careers"
-            className="field-control"
-            style={{ minWidth: "240px" }}
-          />
-          <select
-            name="category"
-            defaultValue={category}
-            className="field-control"
-            style={{ minWidth: "220px" }}
-          >
-            <option value="">All categories</option>
-            {categories.categories.map((item) => (
-              <option key={item.id} value={item.slug}>
-                {item.name} ({item.count})
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="button-primary">
-            Search
-          </button>
-        </form>
+        <CareerSearchForm initialQuery={query} initialCategory={category} categories={categories.categories} />
 
         <p className="muted-text" style={{ margin: 0 }}>
           {careers.total === 0

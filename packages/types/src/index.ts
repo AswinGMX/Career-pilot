@@ -301,6 +301,26 @@ export interface PasswordResetResponse {
   resetToken?: string;
 }
 
+export interface SendOtpPayload {
+  email: string;
+}
+
+export interface SendOtpResponse {
+  ok: boolean;
+  message: string;
+  devCode?: string;
+}
+
+export interface VerifyOtpPayload {
+  email: string;
+  code: string;
+}
+
+export interface VerifyOtpResponse {
+  ok: boolean;
+  message: string;
+}
+
 export interface TenantDetailResponse {
   tenant: SessionTenantSummary;
 }

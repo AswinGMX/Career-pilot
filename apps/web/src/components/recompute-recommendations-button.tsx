@@ -25,8 +25,14 @@ export function RecomputeRecommendationsButton(): JSX.Element {
   };
 
   return (
-    <div className="form-stack">
-      <button type="button" onClick={handleClick} disabled={pending} className="button-primary">
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "10px" }}>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={pending}
+        className="button-primary"
+        style={{ padding: "0 22px", fontSize: "14px" }}
+      >
         {pending ? "Recomputing..." : "Recompute recommendations"}
       </button>
       {error ? <p className="status-text--error" style={{ margin: 0 }}>{error}</p> : null}
