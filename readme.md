@@ -1,3 +1,48 @@
+# Career Pilot
+
+## Production Rebuild In Progress
+
+This repository now contains two parallel tracks:
+
+- `apps/*` and `packages/*`: the new production monorepo scaffold
+- root-level Vite and Node files: the legacy prototype kept for reference during the rebuild
+
+Core planning documents:
+
+- `docs/architecture.md`
+- `docs/backend-api-db-schema.md`
+- `docs/frontend-architecture.md`
+- `docs/rebuild-roadmap.md`
+- `docs/legacy-prototype.md`
+- `docs/production-cutover-checklist.md`
+- `docs/staging-signoff.md`
+- `docs/production-rollout-plan.md`
+- `docs/rollback-plan.md`
+- `docs/prototype-decommission-plan.md`
+- `docs/local-testing-guide.md`
+
+Use the new workspace for all production implementation work.
+
+Local review flow:
+
+1. `pnpm infra:local:start`
+2. `pnpm setup:local`
+3. `pnpm dev`
+
+If the default local ports are busy, `pnpm dev` will pick the next open ones and print the active URLs.
+
+## Default Runtime
+
+The default runtime is the production monorepo:
+
+- `apps/web`
+- `apps/api`
+- `apps/worker`
+
+Use root-level scripts only for legacy reference. They are not the deployment target.
+
+## Legacy Prototype Overview
+
 # 🚀 Career Reality – Try Before You Choose
 
 ## 💡 One-Line Pitch

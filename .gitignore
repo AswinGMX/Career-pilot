@@ -4,6 +4,9 @@ node_modules/
 
 # Build output
 dist
+.next
+.turbo
+coverage
 
 # TypeScript build artifacts
 *.tsbuildinfo
@@ -16,7 +19,14 @@ vite.config.d.ts
 !.env.example
 
 # Local app/runtime data
-data/app-db.json
+.runtime/
+
+# Local object storage (dev driver)
+.storage/
+apps/api/.storage/
+
+# Generated report exports
+apps/api/.generated-reports/
 
 # Logs
 npm-debug.log*

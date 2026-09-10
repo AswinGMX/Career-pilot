@@ -1,0 +1,830 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantType {
+  school
+}
+
+enum TenantStatus {
+  active
+  suspended
+}
+
+enum UserAccountType {
+  individual
+  tenant_member
+}
+
+enum UserStatus {
+  active
+  invited
+  disabled
+}
+
+enum MembershipRole {
+  school_admin
+  student
+  parent_viewer
+}
+
+enum MembershipStatus {
+  active
+  revoked
+}
+
+enum AuditActorType {
+  user
+  system
+}
+
+enum ProfileCompletionStatus {
+  draft
+  submitted
+}
+
+enum CareerStatus {
+  draft
+  active
+  archived
+}
+
+enum ProofSessionStatus {
+  in_progress
+  completed
+}
+
+enum ReportType {
+  student
+  school
+}
+
+enum ReportStatus {
+  queued
+  ready
+  failed
+}
+
+enum McqSource {
+  gemini
+  cache
+  fallback
+}
+
+model Tenant {
+  id                    String             @id @default(uuid()) @db.Uuid
+  name                  String
+  slug                  String             @unique
+  type                  TenantType         @default(school)
+  status                TenantStatus       @default(active)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  memberships           TenantMembership[]
+  auditLogs             AuditLog[]
+  studentProfiles       StudentProfile[]
+  proofSessions         ProofSession[]
+  reports               Report[]
+  experienceEnrollments Enrollment[]
+}
+
+model User {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  email                   String                   @unique
+  passwordHash            String?
+  /// `fullName` stays the display name and is kept in sync with first/last so
+  /// the many existing readers of it do not have to change.
+  fullName                String
+  firstName               String?
+  lastName                String?
+  /// E.164. Optional — collected for account recovery, never required.
+  phone                   String?
+  /// IANA zone (e.g. Asia/Kolkata). Drives every user-facing timestamp.
+  timezone                String?
+  /// BCP-47 tag (e.g. en-IN). Drives date/number formatting.
+  locale                  String?
+  avatarMediaId           String?                  @db.Uuid
+  avatarMedia             MediaAsset?              @relation("UserAvatar", fields: [avatarMediaId], references: [id], onDelete: SetNull)
+  accountType             UserAccountType
+  status                  UserStatus               @default(active)
+  memberships             TenantMembership[]
+  sessions                Session[]
+  oauthAccounts           OAuthAccount[]
+  passwordResetTokens     PasswordResetToken[]
+  auditLogs               AuditLog[]
+  studentProfile          StudentProfile?
+  recommendationSnapshots RecommendationSnapshot[]
+  proofSessions           ProofSession[]
+  reports                 Report[]
+  mcqSets                 McqSet[]
+  experienceEnrollments   Enrollment[]
+  notifications           Notification[]
+  mentorProfile           MentorProfile?
+  mentorRequests          MentorRequest[]          @relation("StudentMentorRequests")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+}
+
+enum MentorRequestStatus {
+  pending
+  accepted
+  declined
+  withdrawn
+}
+
+enum GuidancePlanStatus {
+  draft
+  active
+  completed
+}
+
+model MentorProfile {
+  id                String          @id @default(uuid()) @db.Uuid
+  userId            String          @unique @db.Uuid
+  headline          String?
+  bio               String?
+  expertiseJson     Json?
+  acceptingStudents Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requests          MentorRequest[]
+
+  @@index([acceptingStudents])
+}
+
+model MentorRequest {
+  id              String              @id @default(uuid()) @db.Uuid
+  mentorProfileId String              @db.Uuid
+  studentUserId   String              @db.Uuid
+  status          MentorRequestStatus @default(pending)
+  message         String?
+  createdAt       DateTime            @default(now())
+  respondedAt     DateTime?
+  mentorProfile   MentorProfile       @relation(fields: [mentorProfileId], references: [id], onDelete: Cascade)
+  student         User                @relation("StudentMentorRequests", fields: [studentUserId], references: [id], onDelete: Cascade)
+  plan            GuidancePlan?
+  messages        MentorMessage[]
+
+  @@unique([mentorProfileId, studentUserId])
+  @@index([studentUserId, status])
+  @@index([mentorProfileId, status])
+}
+
+model MentorMessage {
+  id              String        @id @default(uuid()) @db.Uuid
+  mentorRequestId String        @db.Uuid
+  senderUserId    String        @db.Uuid
+  body            String
+  createdAt       DateTime      @default(now())
+  request         MentorRequest @relation(fields: [mentorRequestId], references: [id], onDelete: Cascade)
+
+  @@index([mentorRequestId, createdAt])
+}
+
+model GuidancePlan {
+  id                  String             @id @default(uuid()) @db.Uuid
+  mentorRequestId     String             @unique @db.Uuid
+  mentorUserId        String             @db.Uuid
+  studentUserId       String             @db.Uuid
+  title               String
+  summary             String?
+  notes               String?
+  stepsJson           Json?
+  linkedCareerIdsJson Json?
+  status              GuidancePlanStatus @default(active)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  request             MentorRequest      @relation(fields: [mentorRequestId], references: [id], onDelete: Cascade)
+
+  @@index([studentUserId])
+  @@index([mentorUserId])
+}
+
+model OAuthAccount {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
+  provider          String
+  providerAccountId String
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model TenantMembership {
+  id        String           @id @default(uuid()) @db.Uuid
+  tenantId  String           @db.Uuid
+  userId    String           @db.Uuid
+  role      MembershipRole
+  status    MembershipStatus @default(active)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+}
+
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  refreshTokenHash String
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model EmailOtp {
+  id         String    @id @default(uuid()) @db.Uuid
+  email      String
+  purpose    String    @default("signup")
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, purpose, createdAt])
+}
+
+model AuditLog {
+  id          String         @id @default(uuid()) @db.Uuid
+  actorType   AuditActorType @default(user)
+  actorUserId String?        @db.Uuid
+  tenantId    String?        @db.Uuid
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime       @default(now())
+  actorUser   User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  tenant      Tenant?        @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model CareerCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  careers   Career[]
+}
+
+model Career {
+  id                 String              @id @default(uuid()) @db.Uuid
+  categoryId         String              @db.Uuid
+  slug               String              @unique
+  title              String
+  summary            String
+  status             CareerStatus        @default(active)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  category           CareerCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  detail             CareerDetail?
+  proofSessions      ProofSession[]
+  experiencePrograms ExperienceProgram[]
+
+  @@index([categoryId, status])
+}
+
+model CareerDetail {
+  id             String   @id @default(uuid()) @db.Uuid
+  careerId       String   @unique @db.Uuid
+  educationPath  Json
+  skills         Json
+  positives      Json
+  challenges     Json
+  drawbacks      Json
+  salaryMeta     Json
+  outlookMeta    Json
+  resilienceMeta Json
+  updatedAt      DateTime @updatedAt
+  career         Career   @relation(fields: [careerId], references: [id], onDelete: Cascade)
+}
+
+model StudentProfile {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  userId                  String                   @unique @db.Uuid
+  tenantId                String?                  @db.Uuid
+  gradeLevel              String?
+  ageBand                 String?
+  favoriteSubjects        Json?
+  favoriteActivities      Json?
+  topicsCuriousAbout      Json?
+  personalStrengths       Json?
+  avoidsOrDislikes        Json?
+  completionStatus        ProfileCompletionStatus  @default(draft)
+  submittedAt             DateTime?
+  assessmentQuestionsJson Json?
+  assessmentResultJson    Json?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant                  Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  versions                ProfileVersion[]
+  recommendationSnapshots RecommendationSnapshot[]
+  proofSessions           ProofSession[]
+  mcqSets                 McqSet[]
+
+  @@index([tenantId])
+}
+
+model ProfileVersion {
+  id               String         @id @default(uuid()) @db.Uuid
+  studentProfileId String         @db.Uuid
+  createdByUserId  String         @db.Uuid
+  snapshot         Json
+  createdAt        DateTime       @default(now())
+  studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@index([studentProfileId, createdAt])
+}
+
+model RecommendationSnapshot {
+  id                  String         @id @default(uuid()) @db.Uuid
+  userId              String         @db.Uuid
+  studentProfileId    String         @db.Uuid
+  engineVersion       String
+  profileVersionCount Int
+  itemsJson           Json
+  inputSummary        Json?
+  createdAt           DateTime       @default(now())
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studentProfile      StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([studentProfileId, createdAt])
+}
+
+model ProofSession {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @db.Uuid
+  tenantId           String?            @db.Uuid
+  careerId           String             @db.Uuid
+  studentProfileId   String             @db.Uuid
+  status             ProofSessionStatus @default(in_progress)
+  questionSource     String
+  scoringSource      String?
+  questionSetVersion String
+  questionSetJson    Json
+  answerSetJson      Json?
+  resultJson         Json?
+  overallScore       Int?
+  points             Int?
+  readinessBand      String?
+  startedAt          DateTime           @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant             Tenant?            @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  career             Career             @relation(fields: [careerId], references: [id], onDelete: Cascade)
+  studentProfile     StudentProfile     @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([careerId, createdAt])
+  @@index([studentProfileId, createdAt])
+}
+
+model Report {
+  id           String        @id @default(uuid()) @db.Uuid
+  userId       String        @db.Uuid
+  tenantId     String?       @db.Uuid
+  reportType   ReportType
+  status       ReportStatus  @default(queued)
+  version      String
+  reportJson   Json?
+  fileUrl      String?
+  fileKey      String?
+  errorMessage String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant       Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  shares       ReportShare[]
+
+  @@index([userId, reportType, createdAt])
+  @@index([tenantId, reportType, createdAt])
+}
+
+model ReportShare {
+  id        String    @id @default(uuid()) @db.Uuid
+  reportId  String    @db.Uuid
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  report    Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, createdAt])
+  @@index([expiresAt])
+}
+
+model McqSet {
+  id               String          @id @default(uuid()) @db.Uuid
+  userId           String          @db.Uuid
+  studentProfileId String?         @db.Uuid
+  cacheKey         String
+  source           McqSource
+  grade            Int
+  subject          String
+  audience         String
+  weakTopics       String
+  level            Int
+  count            Int
+  createdAt        DateTime        @default(now())
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile          StudentProfile? @relation(fields: [studentProfileId], references: [id], onDelete: SetNull)
+  items            McqItem[]
+
+  @@index([userId, createdAt])
+  @@index([cacheKey, createdAt])
+}
+
+model McqItem {
+  id            String      @id @default(uuid()) @db.Uuid
+  setId         String      @db.Uuid
+  orderIndex    Int
+  tag           String
+  difficulty    Int
+  stem          String
+  explanation   String
+  correctLetter String
+  set           McqSet      @relation(fields: [setId], references: [id], onDelete: Cascade)
+  options       McqOption[]
+
+  @@unique([setId, orderIndex])
+  @@index([setId])
+}
+
+model McqOption {
+  id         String  @id @default(uuid()) @db.Uuid
+  itemId     String  @db.Uuid
+  letter     String
+  orderIndex Int
+  text       String
+  isCorrect  Boolean
+  item       McqItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, letter])
+  @@index([itemId])
+}
+
+// ── Experience Program (7–10 day multi-modal assessment) — content side ──
+
+enum ProgramStatus {
+  draft
+  in_review
+  published
+  archived
+}
+
+enum ProgramVersionState {
+  draft
+  in_review
+  published
+  archived
+}
+
+enum ContentGenerationSource {
+  ai
+  human
+  hybrid
+}
+
+enum ModuleType {
+  lesson
+  scenario
+  task
+  reflection
+}
+
+enum ContentBlockKind {
+  text
+  video
+  audio
+  panorama360
+  scenario
+  task_prompt
+}
+
+enum MediaKind {
+  video
+  audio
+  panorama360
+  image
+}
+
+enum MediaStatus {
+  uploaded
+  transcoding
+  ready
+  failed
+}
+
+model ExperienceProgram {
+  id                        String           @id @default(uuid()) @db.Uuid
+  careerId                  String?          @db.Uuid
+  slug                      String           @unique
+  title                     String
+  summary                   String
+  status                    ProgramStatus    @default(draft)
+  // Pointer to the published ProgramVersion (kept as a plain id to avoid a
+  // circular relation; resolved in the service layer).
+  currentPublishedVersionId String?          @db.Uuid
+  createdByUserId           String?          @db.Uuid
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  career                    Career?          @relation(fields: [careerId], references: [id], onDelete: SetNull)
+  versions                  ProgramVersion[]
+  enrollments               Enrollment[]
+
+  @@index([status])
+  @@index([careerId])
+}
+
+model ProgramVersion {
+  id               String                  @id @default(uuid()) @db.Uuid
+  programId        String                  @db.Uuid
+  version          Int
+  state            ProgramVersionState     @default(draft)
+  durationDays     Int
+  generationSource ContentGenerationSource @default(ai)
+  promptVersion    String?
+  changelog        String?
+  reviewedByUserId String?                 @db.Uuid
+  publishedAt      DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  program          ExperienceProgram       @relation(fields: [programId], references: [id], onDelete: Cascade)
+  days             ProgramDay[]
+  rubric           Rubric?
+  enrollments      Enrollment[]
+
+  @@unique([programId, version])
+  @@index([programId, state])
+}
+
+model ProgramDay {
+  id               String         @id @default(uuid()) @db.Uuid
+  programVersionId String         @db.Uuid
+  dayIndex         Int
+  title            String
+  objective        String?
+  estimatedMinutes Int?
+  programVersion   ProgramVersion @relation(fields: [programVersionId], references: [id], onDelete: Cascade)
+  modules          Module[]
+
+  @@unique([programVersionId, dayIndex])
+  @@index([programVersionId])
+}
+
+model Module {
+  id           String         @id @default(uuid()) @db.Uuid
+  programDayId String         @db.Uuid
+  order        Int
+  type         ModuleType
+  title        String
+  programDay   ProgramDay     @relation(fields: [programDayId], references: [id], onDelete: Cascade)
+  blocks       ContentBlock[]
+
+  @@index([programDayId])
+}
+
+model ContentBlock {
+  id           String           @id @default(uuid()) @db.Uuid
+  moduleId     String           @db.Uuid
+  order        Int
+  kind         ContentBlockKind
+  bodyJson     Json?
+  mediaAssetId String?          @db.Uuid
+  module       Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset?      @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  scenario     Scenario?
+
+  @@index([moduleId])
+}
+
+model Scenario {
+  id             String       @id @default(uuid()) @db.Uuid
+  contentBlockId String       @unique @db.Uuid
+  graphJson      Json
+  contentBlock   ContentBlock @relation(fields: [contentBlockId], references: [id], onDelete: Cascade)
+}
+
+model Rubric {
+  id               String         @id @default(uuid()) @db.Uuid
+  programVersionId String         @unique @db.Uuid
+  dimensionsJson   Json
+  scaleJson        Json
+  programVersion   ProgramVersion @relation(fields: [programVersionId], references: [id], onDelete: Cascade)
+}
+
+model MediaAsset {
+  id              String               @id @default(uuid()) @db.Uuid
+  tenantId        String?              @db.Uuid
+  kind            MediaKind
+  status          MediaStatus          @default(uploaded)
+  storageKey      String
+  mimeType        String?
+  bytes           Int?
+  durationSec     Int?
+  renditionsJson  Json?
+  captionsKey     String?
+  licenseJson     Json?
+  createdByUserId String?              @db.Uuid
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  contentBlocks   ContentBlock[]
+  evidence        EvidenceSubmission[]
+  avatarOfUsers   User[]               @relation("UserAvatar")
+
+  @@index([tenantId, kind])
+  @@index([status])
+}
+
+// ── Experience Program — enrollment / runtime side ──────────────────
+
+enum EnrollmentStatus {
+  active
+  completed
+  paused
+  expired
+  abandoned
+}
+
+enum DayState {
+  locked
+  available
+  in_progress
+  completed
+}
+
+enum BlockProgressState {
+  not_started
+  in_progress
+  completed
+}
+
+model Enrollment {
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @db.Uuid
+  tenantId         String?              @db.Uuid
+  programId        String               @db.Uuid
+  programVersionId String               @db.Uuid
+  status           EnrollmentStatus     @default(active)
+  scheduleJson     Json?
+  currentDayIndex  Int                  @default(1)
+  startedAt        DateTime             @default(now())
+  dueAt            DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant           Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  program          ExperienceProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  programVersion   ProgramVersion       @relation(fields: [programVersionId], references: [id], onDelete: Restrict)
+  dayProgress      DayProgress[]
+  blockProgress    BlockProgress[]
+  evaluations      EvaluationResult[]
+  evidence         EvidenceSubmission[]
+
+  @@index([userId, status])
+  @@index([programId])
+}
+
+enum EvidenceStatus {
+  pending
+  submitted
+  evaluating
+  scored
+  failed
+}
+
+model EvidenceSubmission {
+  id             String         @id @default(uuid()) @db.Uuid
+  enrollmentId   String         @db.Uuid
+  contentBlockId String         @db.Uuid
+  kind           MediaKind
+  status         EvidenceStatus @default(pending)
+  mediaAssetId   String?        @db.Uuid
+  textBody       String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  enrollment     Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  mediaAsset     MediaAsset?    @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+
+  @@index([enrollmentId, contentBlockId])
+  @@index([status])
+}
+
+model DayProgress {
+  id           String     @id @default(uuid()) @db.Uuid
+  enrollmentId String     @db.Uuid
+  dayIndex     Int
+  state        DayState   @default(locked)
+  unlocksAt    DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, dayIndex])
+  @@index([enrollmentId, dayIndex])
+}
+
+model BlockProgress {
+  id              String             @id @default(uuid()) @db.Uuid
+  enrollmentId    String             @db.Uuid
+  contentBlockId  String             @db.Uuid
+  state           BlockProgressState @default(not_started)
+  interactionJson Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  enrollment      Enrollment         @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, contentBlockId])
+  @@index([enrollmentId])
+}
+
+// ── Notifications (engagement loop) ─────────────────────────────────
+
+enum EvaluationScope {
+  block
+  day
+  final
+}
+
+model EvaluationResult {
+  id            String          @id @default(uuid()) @db.Uuid
+  enrollmentId  String          @db.Uuid
+  scope         EvaluationScope @default(final)
+  rubricVersion String?
+  scoringSource String?
+  promptVersion String?
+  scoresJson    Json?
+  narrative     String?
+  points        Int?
+  readinessBand String?
+  jobId         String?
+  createdAt     DateTime        @default(now())
+  enrollment    Enrollment      @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([enrollmentId, scope])
+}
+
+enum NotificationChannel {
+  email
+  in_app
+}
+
+enum NotificationStatus {
+  pending
+  sent
+  failed
+  read
+}
+
+model Notification {
+  id          String              @id @default(uuid()) @db.Uuid
+  userId      String              @db.Uuid
+  type        String
+  channel     NotificationChannel @default(in_app)
+  status      NotificationStatus  @default(pending)
+  payloadJson Json?
+  sentAt      DateTime?
+  readAt      DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status])
+}

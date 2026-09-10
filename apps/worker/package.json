@@ -1,0 +1,14 @@
+{
+  "name": "@career-pilot/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deployment unit for the background worker. Delegates to the API's worker entrypoint (one codebase, two process types).",
+  "scripts": {
+    "dev": "pnpm --filter @career-pilot/api worker",
+    "start": "pnpm --filter @career-pilot/api start:worker",
+    "build": "node -e \"console.log('worker build: see @career-pilot/api build')\"",
+    "lint": "node -e \"console.log('worker lint placeholder')\"",
+    "typecheck": "node -e \"console.log('worker typecheck: see @career-pilot/api typecheck')\"",
+    "test": "node -e \"console.log('worker tests placeholder')\""
+  }
+}
